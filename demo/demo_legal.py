@@ -52,6 +52,7 @@ except ImportError:
     sys.exit(1)
 
 import shutil
+import concurrent.futures
 console = Console(width=min(110, shutil.get_terminal_size().columns))
 
 # ---------------------------------------------------------------------------
@@ -182,7 +183,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             risk    = r.get("risk_level", "?")
             verdict = r.get("verdict", "?")
             date    = r.get("timestamp", "?")[:10]
-            lines.append(f"[{date}] {ct} — {parties} — Risk: {risk} — Verdict: {verdict}")
+            lines.append(f"[{date}] {ct} - {parties} - Risk: {risk} - Verdict: {verdict}")
         return f"Found {len(results)} related contract(s):\n" + "\n".join(lines)
 
     # ── score_clause ──────────────────────────────────────────────────────────
@@ -289,7 +290,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         prior    = search_memory(f"{party} {ctype}")
 
         if not prior:
-            return f"No prior contracts from '{party}'. This is the first analysis — baseline established."
+            return f"No prior contracts from '{party}'. This is the first analysis - baseline established."
 
         latest = prior[-1]
         lines  = [
@@ -678,10 +679,9 @@ Yüklenici: ____________________  Tarih: ____________________
 # ---------------------------------------------------------------------------
 
 # Model options:
-# nousresearch/hermes-3-llama-3.1-405b  — Hermes 3
-# google/gemini-2.0-flash-001           — Gemini 2.0 Flash
-# openrouter/auto                        — Auto-select available model
-
+# nousresearch/hermes-3-llama-3.1-405b  - Hermes 3 (recommended, requires credits)
+# google/gemini-2.0-flash-001           - Fast, excellent tool calling
+# openrouter/auto                        - Auto-select
 DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
 
@@ -781,28 +781,51 @@ def run_legal_analysis(contract_path: str, api_key: str,
             ],
         })
 
-        for tc in msg.tool_calls:
-            tname = tc.function.name
-            try:
-                tinp = json.loads(tc.function.arguments)
-            except Exception:
-                tinp = {}
-            calls.append(tname)
+        # Split tool calls: score_clause runs concurrently, others sequentially
+        icons = {
+            "read_contract":             "📄",
+            "detect_language":           "🌐",
+            "search_memory":             "🔍",
+            "score_clause":              "⚖️ ",
+            "check_missing_clauses":     "🔎",
+            "generate_negotiation_text": "💬",
+            "compare_contracts":         "📊",
+            "render_verdict":            "🏛️ ",
+            "save_report":               "💾",
+            "send_alert":                "🚨",
+        }
 
-            icons = {
-                "read_contract":          "📄",
-                "detect_language":        "🌐",
-                "search_memory":          "🔍",
-                "score_clause":           "⚖️ ",
-                "check_missing_clauses":  "🔎",
-                "generate_negotiation_text": "💬",
-                "compare_contracts":      "📊",
-                "render_verdict":         "🏛️ ",
-                "save_report":            "💾",
-                "send_alert":             "🚨",
-            }
+        score_tcs    = [tc for tc in msg.tool_calls if tc.function.name == "score_clause"]
+        non_score_tcs = [tc for tc in msg.tool_calls if tc.function.name != "score_clause"]
 
-            if tname == "score_clause":
+        # --- Concurrent execution for score_clause ---
+        if score_tcs:
+            def _run_score(tc):
+                try:
+                    tinp = json.loads(tc.function.arguments)
+                except Exception:
+                    tinp = {}
+                result = dispatch_tool("score_clause", tinp)
+                return tc, tinp, result
+
+            if len(score_tcs) > 1:
+                console.print(
+                    f"  [dim cyan]⚡ Running {len(score_tcs)} clause scores concurrently...[/]"
+                )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(score_tcs)) as ex:
+                futures = {ex.submit(_run_score, tc): tc for tc in score_tcs}
+                score_results = []
+                for fut in concurrent.futures.as_completed(futures):
+                    tc, tinp, result = fut.result()
+                    score_results.append((tc, tinp, result))
+
+            # Display and collect results in original order
+            for tc in score_tcs:
+                match = next((r for r in score_results if r[0].id == tc.id), None)
+                if not match:
+                    continue
+                _, tinp, result = match
+                calls.append("score_clause")
                 cname = tinp.get("clause_name", "")
                 score = tinp.get("score", 0)
                 clause_scores[cname] = score
@@ -817,10 +840,20 @@ def run_legal_analysis(contract_path: str, api_key: str,
                 )
                 if neg and score >= 5:
                     console.print(f"     [dim]💬 {neg[:80]}[/]")
-            elif tname == "render_verdict":
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+
+        # --- Sequential execution for all other tools ---
+        for tc in non_score_tcs:
+            tname = tc.function.name
+            try:
+                tinp = json.loads(tc.function.arguments)
+            except Exception:
+                tinp = {}
+            calls.append(tname)
+
+            if tname == "render_verdict":
                 verdict_shown += 1
-                preview = tinp.get("verdict", "")
-                console.print(f"  🏛️  [yellow]render_verdict[/] [dim]{preview}[/]")
+                console.print(f"  🏛️  [yellow]render_verdict[/] [dim]{tinp.get('verdict','')}[/]")
             else:
                 preview = str(tinp.get("path", tinp.get("query",
                               tinp.get("clause_name", tinp.get("contract_type",
@@ -834,7 +867,7 @@ def run_legal_analysis(contract_path: str, api_key: str,
             elif tname == "send_alert":
                 alerts_sent += 1
             elif tname == "render_verdict":
-                pass  # Already displayed in dispatch
+                pass
             elif tname not in ("read_contract",):
                 if len(result) < 500:
                     console.print(f"  [dim]{result}[/]")
@@ -1162,7 +1195,7 @@ def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
     )
 
     console.print(Panel(
-        "[bold cyan]Hermes Legal Advisor — Chat Mode[/]\n"
+        "[bold cyan]Hermes Legal Advisor - Chat Mode[/]\n"
         "[dim]Ask about contract clauses, past analyses, or legal concepts.\n"
         "Type 'exit' to leave.[/]",
         border_style="cyan",
