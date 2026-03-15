@@ -46,7 +46,7 @@ flowchart TD
 |---------|--------------|
 | **Memory** | Stores every analyzed contract - detects if counter-party terms are getting worse |
 | **Skills** | Legal playbook defines scoring rubric, red flags, and verdict logic |
-| **Subagents** | Parallel clause scoring - each category analyzed independently |
+| **Subagents** | Parallel clause scoring via ThreadPoolExecutor - concurrent execution |
 | **Gateway** | Sends CRITICAL/HIGH alerts (extensible to email/Slack/Telegram) |
 | **Atropos RL** | Reward function trains Hermes to find more red flags with higher accuracy |
 
@@ -60,7 +60,10 @@ flowchart TD
 | 🔎 **Missing Clause Detection** | Flags standard clauses that are absent |
 | 🏛️ **Final Verdict** | SIGN / NEGOTIATE / REJECT with reasoning |
 | 🧠 **Memory** | Compares against all prior contracts from same party |
+| 📊 **Version Comparison** | Compare two contract versions - see what changed |
+| 👁️ **Watch Mode** | Monitor a folder and auto-analyze new contracts |
 | 💬 **Chat Mode** | Ask questions about clauses and past analyses |
+| ⚡ **Concurrent Scoring** | Multiple clauses scored in parallel threads |
 
 ## Risk Scoring
 
@@ -93,6 +96,26 @@ python demo/demo_legal.py --turkish
 python demo/demo_legal.py --chat
 ```
 
+## Version Comparison
+
+Compare two versions of the same contract to see exactly what changed:
+
+```bash
+python demo/demo_legal.py --compare-v1 sample_contracts/freelance_contract.txt --compare-v2 sample_contracts/freelance_contract_v2.txt
+```
+
+Shows a clause-by-clause table: improved, got worse, or unchanged.
+
+## Watch Mode
+
+Monitor a folder and auto-analyze any contract dropped into it:
+
+```bash
+python demo/demo_legal.py --watch contracts_inbox
+```
+
+Drop any .txt file into the folder - Hermes detects it and starts analysis automatically.
+
 ## Reward Function
 
 ```mermaid
@@ -123,6 +146,24 @@ graph LR
     style C1 fill:#8e44ad,color:#fff
     style D1 fill:#2980b9,color:#fff
 ```
+
+## What's New
+
+**v1.2.0 - Concurrent Execution**
+- Concurrent clause scoring via ThreadPoolExecutor
+- Multiple clauses analyzed in parallel for faster results
+
+**v1.1.0 - Compare & Watch**
+- Version comparison mode - see exactly what changed between two contracts
+- Watch mode - monitor a folder and auto-analyze new contracts
+- Chat mode - ask questions about past analyses
+
+**v1.0.0 - Initial Release**
+- 9-clause risk scoring with SIGN/NEGOTIATE/REJECT verdict
+- English and Turkish support with auto language detection
+- Negotiation text suggestions for critical clauses
+- Missing clause detection
+- Memory - remembers every analyzed contract
 
 ## Disclaimer
 
