@@ -1,0 +1,44 @@
+EMPLOYMENT AGREEMENT
+
+This Employment Agreement is entered into as of February 15, 2026,
+between StartupXYZ Inc. ("Company") and Jane Smith ("Employee").
+
+1. POSITION AND DUTIES
+Employee is hired as Senior Software Engineer. Employee agrees to devote full
+business time and attention to the Company and shall not engage in other employment
+without prior written consent.
+
+2. COMPENSATION
+Base salary: $120,000 per year, paid bi-weekly.
+Annual bonus: discretionary, at Company sole determination.
+Stock options: 10,000 options vesting over 4 years with 1-year cliff.
+
+3. BENEFITS
+Employee is eligible for health insurance, dental, 15 days PTO per year,
+and participation in 401(k) plan after 90 days.
+
+4. INTELLECTUAL PROPERTY
+Employee agrees that all inventions, improvements, and developments conceived
+during employment are the exclusive property of the Company, including inventions
+created outside of working hours if they relate to the Company business.
+
+5. NON-COMPETE
+For 12 months following termination, Employee shall not work for any direct
+competitor within the United States. A list of competitors is attached as Exhibit A.
+
+6. NON-SOLICITATION
+For 18 months following termination, Employee shall not solicit Company employees
+or customers.
+
+7. AT-WILL EMPLOYMENT
+Employment is at-will. Company may terminate at any time with or without cause,
+with 2 weeks severance if terminated without cause after 1 year of service.
+
+8. CONFIDENTIALITY
+Employee shall maintain confidentiality of all Company information during and for
+3 years after employment.
+
+9. GOVERNING LAW
+This Agreement is governed by California law. Disputes resolved in San Francisco courts.
+
+Employee: ____________________  Date: ____________________
