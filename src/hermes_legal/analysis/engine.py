@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+import hashlib
+from typing import Any, Dict, List, Optional
+
+from ..memory.store import MemoryStore
+from ..providers import AnalysisResult, BaseProvider, get_provider
+from .risk import RISK_RANK
+
+
+def file_hash(text: str) -> str:
+    return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+
+
+def _memory_context_for(memory: MemoryStore, text: str, limit: int = 5) -> str:
+    """Build a short context blurb from prior contracts to feed the provider."""
+    contracts = memory.contracts()
+    if not contracts:
+        return ""
+    recent = contracts[-limit:]
+    lines = []
+    for c in recent:
+        lines.append(
+            f"- [{c.get('timestamp', '?')[:10]}] {c.get('contract_type', '?')} "
+            f"with {c.get('parties', '?')} -> risk {c.get('risk_level', '?')}, "
+            f"verdict {c.get('verdict', '?')}"
+        )
+    return "\n".join(lines)
+
+
+def analyze_contract(
+    text: str,
+    provider: Optional[BaseProvider] = None,
+    provider_name: str = "auto",
+    perspective: str = "neutral",
+    memory: Optional[MemoryStore] = None,
+    use_memory: bool = True,
+    save: bool = True,
+) -> Dict[str, Any]:
+    """
+    Run a full analysis pipeline over contract text and return a dict with
+    the AnalysisResult plus trend/memory metadata. This is the single
+    function the CLI, the GitHub Action, and any future integration (web
+    UI, batch mode) all call.
+    """
+    provider = provider or get_provider(provider_name)
+    memory = memory or MemoryStore()
+    context = _memory_context_for(memory, text) if use_memory else ""
+
+    result: AnalysisResult = provider.analyze(text, perspective=perspective, memory_context=context)
+    h = file_hash(text)
+
+    trend = None
+    if use_memory:
+        prior = memory.find_by_party(result.parties) if result.parties != "Unknown" else []
+        if prior:
+            prev = prior[-1]
+            prev_rank = RISK_RANK.get(prev.get("risk_level", ""), 0)
+            curr_rank = RISK_RANK.get(result.overall_risk, 0)
+            if curr_rank > prev_rank:
+                trend = "WORSE"
+            elif curr_rank < prev_rank:
+                trend = "IMPROVED"
+            else:
+                trend = "UNCHANGED"
+
+    if save:
+        memory.write(
+            {
+                "type": "contract_analyzed",
+                "contract_type": result.contract_type,
+                "parties": result.parties,
+                "risk_level": result.overall_risk,
+                "verdict": result.verdict,
+                "contract_hash": h,
+                "language": result.language,
+                "findings_count": len(result.clauses),
+                "provider": result.provider,
+                "perspective": perspective,
+            }
+        )
+
+    return {
+        "result": result,
+        "hash": h,
+        "trend": trend,
+        "red_flags": [c for c in result.clauses if c.get("is_red_flag")],
+    }
+
+
+def compare_contracts(text_a: str, text_b: str, provider: Optional[BaseProvider] = None) -> Dict[str, Any]:
+    """Analyze two versions of a contract independently and diff their clause scores."""
+    provider = provider or get_provider("auto")
+    result_a = provider.analyze(text_a)
+    result_b = provider.analyze(text_b)
+
+    by_name_a = {c["name"]: c for c in result_a.clauses}
+    by_name_b = {c["name"]: c for c in result_b.clauses}
+    all_names = sorted(set(by_name_a) | set(by_name_b))
+
+    rows: List[Dict[str, Any]] = []
+    for name in all_names:
+        a = by_name_a.get(name)
+        b = by_name_b.get(name)
+        score_a = a["score"] if a else None
+        score_b = b["score"] if b else None
+        if score_a is None:
+            status = "ADDED"
+        elif score_b is None:
+            status = "REMOVED"
+        elif score_b < score_a:
+            status = "IMPROVED"
+        elif score_b > score_a:
+            status = "WORSE"
+        else:
+            status = "UNCHANGED"
+        rows.append({"clause": name, "score_v1": score_a, "score_v2": score_b, "status": status})
+
+    return {
+        "v1": result_a,
+        "v2": result_b,
+        "rows": rows,
+        "risk_changed": result_a.overall_risk != result_b.overall_risk,
+    }

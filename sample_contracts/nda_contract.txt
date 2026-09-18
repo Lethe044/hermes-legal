@@ -1,0 +1,43 @@
+MUTUAL NON-DISCLOSURE AGREEMENT
+
+This Mutual NDA is entered into as of March 1, 2026,
+between Alpha Ventures LLC ("Party A") and Beta Solutions Ltd ("Party B").
+
+1. PURPOSE
+The parties wish to explore a potential business partnership and may need to share
+confidential information with each other.
+
+2. DEFINITION OF CONFIDENTIAL INFORMATION
+Confidential Information means any and all information disclosed by either party,
+including but not limited to business plans, financial data, technical specifications,
+customer lists, pricing, and any other information marked as confidential or which
+a reasonable person would consider confidential given the circumstances.
+
+3. OBLIGATIONS
+Each party agrees to: (a) hold the other party Confidential Information in strict
+confidence; (b) not disclose such information to third parties without prior written
+consent; (c) use the information solely for evaluating the potential partnership.
+
+4. TERM AND SURVIVAL
+This Agreement shall remain in effect for two (2) years from the date of execution.
+Confidentiality obligations for trade secrets shall survive indefinitely.
+For all other information, obligations survive for 3 years post-termination.
+
+5. EXCLUSIONS
+Information is not confidential if: (a) it is or becomes publicly known through no
+breach of this Agreement; (b) it was rightfully known before disclosure;
+(c) it is independently developed without use of confidential information.
+
+6. RETURN OF INFORMATION
+Upon request or termination, each party shall promptly return or destroy all
+confidential materials.
+
+7. GOVERNING LAW
+This Agreement shall be governed by the laws of England and Wales.
+Disputes shall be resolved through mediation before litigation.
+
+8. REMEDIES
+Each party acknowledges that breach may cause irreparable harm and that injunctive
+relief may be sought without posting bond.
+
+Signed: ____________________  Date: ____________________

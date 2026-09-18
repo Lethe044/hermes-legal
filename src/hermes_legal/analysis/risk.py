@@ -1,0 +1,9 @@
+RISK_LEVELS = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+VERDICTS = ("SIGN", "NEGOTIATE", "REJECT")
+
+RISK_ICONS = {"CRITICAL": "\U0001F534", "HIGH": "\U0001F7E0", "MEDIUM": "\U0001F7E1", "LOW": "\U0001F7E2"}
+RISK_COLORS = {"CRITICAL": "bold red", "HIGH": "bold yellow", "MEDIUM": "yellow", "LOW": "green"}
+VERDICT_ICONS = {"SIGN": "\u2705", "NEGOTIATE": "\u26A0\uFE0F", "REJECT": "\U0001F6AB"}
+VERDICT_COLORS = {"SIGN": "bold green", "NEGOTIATE": "bold yellow", "REJECT": "bold red"}
+
+RISK_RANK = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}

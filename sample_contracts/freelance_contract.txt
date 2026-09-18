@@ -1,0 +1,46 @@
+FREELANCE SERVICE AGREEMENT
+
+This Agreement is entered into as of January 1, 2026,
+between TechCorp Inc. ("Client") and the individual identified below ("Contractor").
+
+1. SERVICES
+Contractor agrees to provide software development services as requested by Client.
+Specific deliverables will be defined in separate Statements of Work.
+
+2. PAYMENT
+Client shall pay Contractor $85 per hour. Invoices are due within 60 days of receipt.
+Late payments shall incur a penalty of 0.5% per month.
+
+3. INTELLECTUAL PROPERTY
+All work product, inventions, and improvements created by Contractor during this Agreement,
+WHETHER OR NOT during working hours or using Client equipment, shall be the sole property
+of Client. This assignment includes any work created on Contractor personal time that
+relates in any way to Client business or industry.
+
+4. CONFIDENTIALITY
+Contractor agrees to keep all Client information confidential. This obligation shall
+survive termination INDEFINITELY and without limitation.
+
+5. NON-COMPETE
+During the term and for THREE (3) YEARS following termination, Contractor shall not
+engage in any business activity that competes with Client ANYWHERE IN THE WORLD.
+
+6. TERMINATION
+Client may terminate this Agreement with TWO (2) days written notice.
+Contractor may terminate with 30 days written notice.
+
+7. LIABILITY
+Contractor liability for any claims shall be UNLIMITED.
+Client liability shall be limited to amounts paid in the prior 30 days.
+
+8. GOVERNING LAW
+This Agreement shall be governed by the laws of Delaware, USA.
+
+9. AUTO-RENEWAL
+This Agreement automatically renews unless notice is given at least SEVEN (7) days
+before the end of the current term.
+
+10. DISPUTE RESOLUTION
+Disputes shall be resolved through binding arbitration with costs borne entirely by Contractor.
+
+Contractor: ____________________  Date: ____________________

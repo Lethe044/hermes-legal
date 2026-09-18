@@ -1,0 +1,24 @@
+environment:
+  name: legal-advisor
+  class: environments.legal_env.LegalAdvisorEnv
+
+training:
+  workers: 4
+  batch_size: 16
+  max_turns_per_episode: 25
+  temperature: 0.3
+
+model:
+  name: openrouter/nousresearch/hermes-3-llama-3.1-405b
+  max_tokens: 2000
+
+reward_weights:
+  contract_read: 0.15
+  clauses_scored: 0.30
+  red_flags_found: 0.25
+  report_saved: 0.20
+  risk_accurate: 0.10
+
+logging:
+  wandb_project: hermes-legal-advisor
+  log_every_n_steps: 10

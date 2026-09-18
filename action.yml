@@ -1,0 +1,83 @@
+name: "Hermes Legal Advisor - Contract Check"
+description: >
+  Automatically scans contract files (.txt, .md, .pdf, .docx) changed in a
+  pull request and posts a risk summary to the job summary. Works with free
+  providers (Groq, Gemini) or completely offline with no API key at all.
+author: "Lethe044"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  path:
+    description: "File or folder of contracts to scan."
+    required: true
+    default: "."
+  provider:
+    description: "groq | gemini | openrouter | ollama | offline | auto"
+    required: false
+    default: "auto"
+  perspective:
+    description: "Whose side to review from: client, vendor, contractor, employer, employee, neutral, ..."
+    required: false
+    default: "neutral"
+  fail-on-risk:
+    description: "Comma-separated risk levels that should fail the job, e.g. CRITICAL,HIGH. Leave empty to never fail."
+    required: false
+    default: ""
+  groq-api-key:
+    description: "Optional GROQ_API_KEY for free-tier Groq inference."
+    required: false
+    default: ""
+  gemini-api-key:
+    description: "Optional GEMINI_API_KEY for free-tier Gemini inference."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Hermes Legal Advisor
+      shell: bash
+      run: pip install "hermes-legal-advisor[all]"
+
+    - name: Run contract scan
+      shell: bash
+      env:
+        GROQ_API_KEY: ${{ inputs.groq-api-key }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+      run: |
+        set -e
+        TARGET="${{ inputs.path }}"
+        PROVIDER="${{ inputs.provider }}"
+        PERSPECTIVE="${{ inputs.perspective }}"
+        FAIL_ON="${{ inputs.fail-on-risk }}"
+
+        echo "## Hermes Legal Advisor - Contract Review" >> "$GITHUB_STEP_SUMMARY"
+
+        FAIL_ARGS=()
+        if [ -n "$FAIL_ON" ]; then
+          FAIL_ARGS=(--fail-on-risk "$FAIL_ON")
+        fi
+
+        if [ -d "$TARGET" ]; then
+          hermes-legal batch "$TARGET" --provider "$PROVIDER" --perspective "$PERSPECTIVE" \
+            --reports-dir "$RUNNER_TEMP/hermes_reports"
+          if [ -f "$RUNNER_TEMP/hermes_reports/batch_summary.csv" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| file | contract_type | overall_risk | verdict | red_flag_count |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+            tail -n +2 "$RUNNER_TEMP/hermes_reports/batch_summary.csv" | \
+              awk -F',' '{print "| "$1" | "$2" | "$5" | "$6" | "$7" |"}' >> "$GITHUB_STEP_SUMMARY"
+          fi
+        else
+          hermes-legal analyze "$TARGET" --provider "$PROVIDER" --perspective "$PERSPECTIVE" \
+            --output "$RUNNER_TEMP/report.md" "${FAIL_ARGS[@]}"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+        fi

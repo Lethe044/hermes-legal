@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-legal-advisor"
+version = "2.0.0"
+description = "Free, multi-provider AI contract analysis toolkit: scores risk, suggests redlines, and gives a sign/negotiate/reject verdict."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Lethe044" }]
+keywords = [
+    "legal-tech", "contract-analysis", "contract-review", "ai", "llm",
+    "groq", "gemini", "cli", "redline", "nda", "developer-tools",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Legal Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+groq = ["groq>=0.9.0"]
+gemini = ["google-generativeai>=0.7.0"]
+openrouter = ["openai>=1.0.0"]
+pdf = ["pypdf>=4.0.0"]
+docx = ["python-docx>=1.1.0"]
+all = [
+    "groq>=0.9.0",
+    "google-generativeai>=0.7.0",
+    "openai>=1.0.0",
+    "pypdf>=4.0.0",
+    "python-docx>=1.1.0",
+]
+dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/Lethe044/hermes-legal"
+Repository = "https://github.com/Lethe044/hermes-legal"
+Issues = "https://github.com/Lethe044/hermes-legal/issues"
+Changelog = "https://github.com/Lethe044/hermes-legal/blob/main/CHANGELOG.md"
+
+[project.scripts]
+hermes-legal = "hermes_legal.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

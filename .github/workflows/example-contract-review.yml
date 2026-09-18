@@ -1,0 +1,24 @@
+# Example: drop this file into any repository's .github/workflows/ folder
+# to get an automatic contract risk summary on every pull request that
+# touches a contracts/ folder. This file lives here as documentation for
+# hermes-legal's own users - it is not required for hermes-legal itself.
+name: Contract Review (example usage)
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Review changed contracts
+        uses: Lethe044/hermes-legal@main
+        with:
+          path: contracts/
+          provider: auto
+          fail-on-risk: CRITICAL
+          groq-api-key: ${{ secrets.GROQ_API_KEY }}
