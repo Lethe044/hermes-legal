@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.1.0] - Unreleased
+
+### Added
+- Contract generator (`hermes-legal generate`): drafts a new NDA,
+  freelance, employment, or general service agreement from scratch,
+  entirely offline and free, with fillable fields.
+- Firm playbook customization (`hermes-legal playbook init`): a single
+  YAML file to override clause risk scores and negotiation language, add
+  custom red-flag rules, and adjust risk thresholds, without touching code.
+  Picked up automatically by `analyze`, `batch`, and `serve`.
+- Local web dashboard (`hermes-legal serve`): a drag-and-drop browser UI
+  for non-technical users, built entirely on Python's standard library
+  with zero new required dependencies.
+- Professional PDF report export (`--output-pdf`, requires the new
+  `pdfreport` extra / reportlab).
+- `hermes-legal history` command to browse previously analyzed contracts
+  from the CLI.
+- Full test coverage for the generator and playbook systems.
+
 ## [2.0.0] - Unreleased
 
 Complete rebuild from a hackathon demo script into a standalone,

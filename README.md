@@ -39,6 +39,10 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Chat mode** | Ask follow-up questions about anything already analyzed |
 | **Bilingual** | English and Turkish contract analysis, auto-detected |
 | **GitHub Action** | Drop it into any repo's CI to auto-review contract files in pull requests |
+| **Contract generator** | Draft a new NDA, freelance, employment, or service agreement from scratch, for free, offline |
+| **Web dashboard** | Drag-and-drop browser UI for non-technical users - no CLI required |
+| **Firm playbook** | Customize risk thresholds and negotiation language to match your own house style, via one YAML file |
+| **PDF reports** | Professional, brandable PDF output alongside Markdown and DOCX |
 
 ## Risk Scoring
 
@@ -130,6 +134,49 @@ hermes-legal watch ./contracts_inbox
 hermes-legal chat
 ```
 
+### Web dashboard (no CLI needed)
+
+```bash
+hermes-legal serve
+```
+
+Opens a browser tab at `http://127.0.0.1:8765` where anyone can drag and
+drop a contract file and get an instant analysis - built for colleagues
+or clients who will never touch a terminal. Uses only Python's standard
+library, so it needs no extra install.
+
+### Generate a new contract
+
+```bash
+hermes-legal generate --list
+hermes-legal generate nda --field party_a="Acme Inc." --field party_b="Beta LLC" --output nda.txt
+hermes-legal generate freelance --interactive
+```
+
+Produces a ready-to-edit draft entirely offline, for free. Any field you
+don't supply is left as a clearly marked placeholder.
+
+### Customize for your firm
+
+```bash
+hermes-legal playbook init
+```
+
+Writes an example `~/.hermes-legal/playbook.yaml` you can edit to set your
+firm name, override any clause's risk score or negotiation language, add
+entirely custom red-flag rules, or adjust the CRITICAL/HIGH/MEDIUM
+thresholds - all without touching a line of code. Every `analyze`,
+`batch`, and `serve` command picks it up automatically if present, or
+point at a specific file with `--playbook path/to/file.yaml`.
+
+### Professional PDF reports
+
+```bash
+hermes-legal analyze contract.pdf --output-pdf report.pdf
+```
+
+Requires `pip install hermes-legal-advisor[pdfreport]` (included in `[all]`).
+
 ## Use it in CI
 
 Drop this into any repository to get an automatic risk summary whenever a
@@ -176,7 +223,10 @@ hermes-legal/
 │   ├── analysis/       # orchestration, risk scoring, version diff
 │   ├── reports/        # Markdown, CSV, DOCX redline generation
 │   ├── memory/         # JSONL-backed contract history
-│   ├── cli.py          # analyze / batch / compare / watch / chat / providers
+│   ├── cli.py          # analyze / batch / compare / watch / chat / providers / generate / serve / playbook / history
+│   ├── generator.py    # offline contract templates (NDA, freelance, employment, service)
+│   ├── playbook.py     # firm-specific YAML customization
+│   ├── webapp.py        # zero-dependency local web dashboard
 │   ├── watch.py
 │   └── chat.py
 ├── tests/

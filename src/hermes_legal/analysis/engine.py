@@ -4,6 +4,7 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 from ..memory.store import MemoryStore
+from ..playbook import Playbook
 from ..providers import AnalysisResult, BaseProvider, get_provider
 from .risk import RISK_RANK
 
@@ -36,16 +37,23 @@ def analyze_contract(
     memory: Optional[MemoryStore] = None,
     use_memory: bool = True,
     save: bool = True,
+    playbook: Optional[Playbook] = None,
 ) -> Dict[str, Any]:
     """
     Run a full analysis pipeline over contract text and return a dict with
     the AnalysisResult plus trend/memory metadata. This is the single
-    function the CLI, the GitHub Action, and any future integration (web
-    UI, batch mode) all call.
+    function the CLI, the GitHub Action, the web dashboard, and any future
+    integration all call.
     """
+    playbook = playbook or Playbook()
     provider = provider or get_provider(provider_name)
+    if provider.name == "offline":
+        provider.playbook = playbook
     memory = memory or MemoryStore()
     context = _memory_context_for(memory, text) if use_memory else ""
+    addendum = playbook.prompt_addendum()
+    if addendum:
+        context = f"{context}\n\nFirm playbook instructions:\n{addendum}" if context else addendum
 
     result: AnalysisResult = provider.analyze(text, perspective=perspective, memory_context=context)
     h = file_hash(text)

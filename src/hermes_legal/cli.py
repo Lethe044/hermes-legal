@@ -4,7 +4,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -16,8 +16,15 @@ from .analysis.engine import analyze_contract, compare_contracts
 from .analysis.risk import RISK_COLORS, RISK_ICONS, VERDICT_COLORS, VERDICT_ICONS
 from .ingest import read_document, SUPPORTED_EXTENSIONS
 from .memory.store import MemoryStore
+from .playbook import DEFAULT_PLAYBOOK_PATH, Playbook, write_example_playbook
 from .providers import AUTO_DETECT_ORDER, PROVIDER_REGISTRY, ProviderError, get_provider
-from .reports import render_markdown_report, render_redline_markdown, write_batch_csv, write_redline_docx
+from .reports import (
+    render_markdown_report,
+    render_redline_markdown,
+    write_batch_csv,
+    write_pdf_report,
+    write_redline_docx,
+)
 
 console = Console(width=min(110, __import__("shutil").get_terminal_size().columns))
 
@@ -113,11 +120,14 @@ def cmd_analyze(args):
         console.print(f"[red]{exc}[/]")
         sys.exit(1)
 
+    playbook = Playbook.load(args.playbook) if args.playbook or DEFAULT_PLAYBOOK_PATH.exists() else Playbook()
+
     console.print(f"[dim]Using provider: {provider.name}[/]")
     with console.status("[cyan]Analyzing contract...[/]"):
         try:
             outcome = analyze_contract(
-                text, provider=provider, perspective=args.perspective, save=not args.no_save
+                text, provider=provider, perspective=args.perspective, save=not args.no_save,
+                playbook=playbook,
             )
         except ProviderError as exc:
             console.print(f"[red]{exc}[/]")
@@ -143,6 +153,14 @@ def cmd_analyze(args):
         else:
             console.print("[yellow]python-docx not installed; skipped DOCX redline. "
                           "Install with: pip install python-docx[/]")
+
+    if args.output_pdf:
+        saved = write_pdf_report(result, outcome["hash"], outcome["trend"], args.output_pdf, firm_name=playbook.firm_name)
+        if saved:
+            console.print(f"[dim]PDF report saved to {saved}[/]")
+        else:
+            console.print("[yellow]reportlab not installed; skipped PDF export. "
+                          "Install with: pip install reportlab[/]")
 
     console.print(f"\n[dim]{DISCLAIMER}[/]")
 
@@ -246,6 +264,82 @@ def cmd_chat(args):
     run_chat_mode(provider_name=args.provider, console=console)
 
 
+def cmd_playbook_init(args):
+    path = write_example_playbook(args.path)
+    console.print(f"[green]Example playbook written to {path}[/]")
+    console.print("[dim]Edit it to set your firm name, override clause scores, or add custom rules.[/]")
+
+
+def cmd_history(args):
+    memory = MemoryStore()
+    contracts = memory.contracts()
+    if args.query:
+        contracts = [c for c in contracts if args.query.lower() in str(c).lower()]
+    if not contracts:
+        console.print("[yellow]No analyzed contracts found.[/]")
+        return
+    t = Table(box=box.SIMPLE, header_style="bold")
+    for col in ("Date", "Type", "Parties", "Risk", "Verdict", "Provider", "Hash"):
+        t.add_column(col)
+    for c in contracts[-args.limit:][::-1]:
+        t.add_row(
+            str(c.get("timestamp", ""))[:10],
+            str(c.get("contract_type", "")),
+            str(c.get("parties", ""))[:40],
+            f"[{RISK_COLORS.get(c.get('risk_level'), 'white')}]{c.get('risk_level', '')}[/]",
+            str(c.get("verdict", "")),
+            str(c.get("provider", "")),
+            str(c.get("contract_hash", "")),
+        )
+    console.print(t)
+
+
+def cmd_generate(args):
+    from .generator import CONTRACT_TEMPLATES, generate_contract
+
+    if args.list:
+        t = Table(title="Available Templates", box=box.SIMPLE, header_style="bold")
+        t.add_column("Key")
+        t.add_column("Name")
+        t.add_column("Fields")
+        for key, tpl in CONTRACT_TEMPLATES.items():
+            t.add_row(key, tpl["name"], ", ".join(tpl["fields"]))
+        console.print(t)
+        return
+
+    if args.template not in CONTRACT_TEMPLATES:
+        console.print(f"[red]Unknown template '{args.template}'. Run 'hermes-legal generate --list' to see options.[/]")
+        sys.exit(1)
+
+    answers: Dict[str, str] = {}
+    for kv in args.field or []:
+        if "=" not in kv:
+            console.print(f"[red]--field must be key=value, got: {kv}[/]")
+            sys.exit(1)
+        k, v = kv.split("=", 1)
+        answers[k.strip()] = v.strip()
+
+    tpl = CONTRACT_TEMPLATES[args.template]
+    missing = [f for f in tpl["fields"] if f not in answers]
+    if missing and not args.interactive:
+        console.print(f"[yellow]Missing fields, using placeholders: {', '.join(missing)}[/]")
+    elif missing and args.interactive:
+        for f in missing:
+            answers[f] = console.input(f"[bold]{f}:[/] ").strip()
+
+    text = generate_contract(args.template, answers)
+    out_path = Path(args.output or f"{args.template}_generated.txt")
+    out_path.write_text(text, encoding="utf-8")
+    console.print(f"[green]Generated contract written to {out_path}[/]")
+    console.print(f"\n[dim]{DISCLAIMER}[/]")
+
+
+def cmd_serve(args):
+    from .webapp import run_server
+
+    run_server(host=args.host, port=args.port, provider_name=args.provider, open_browser=not args.no_browser)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hermes-legal",
@@ -267,8 +361,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Whose side you're reviewing for: client, vendor, contractor, employer, employee, tenant, landlord, neutral.",
     )
     p_analyze.add_argument("--output", help="Save the full Markdown report to this path.")
+    p_analyze.add_argument("--output-pdf", help="Save a professional PDF report to this path (requires reportlab).")
     p_analyze.add_argument("--redline", help="Save a Markdown redline (only flagged clauses) to this path.")
     p_analyze.add_argument("--redline-docx", help="Save a DOCX redline memo to this path (requires python-docx).")
+    p_analyze.add_argument("--playbook", default=None, help="Path to a firm playbook YAML file (default: ~/.hermes-legal/playbook.yaml if present).")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
         "--fail-on-risk", default=None,
@@ -301,6 +397,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_providers = sub.add_parser("providers", help="List available providers and their configuration status.")
     p_providers.set_defaults(func=cmd_providers)
+
+    p_playbook = sub.add_parser("playbook", help="Manage firm/personal playbook customization.")
+    playbook_sub = p_playbook.add_subparsers(dest="playbook_command", required=True)
+    p_playbook_init = playbook_sub.add_parser("init", help="Write an example playbook.yaml to customize.")
+    p_playbook_init.add_argument("--path", default=None, help="Where to write it (default: ~/.hermes-legal/playbook.yaml)")
+    p_playbook_init.set_defaults(func=cmd_playbook_init)
+
+    p_history = sub.add_parser("history", help="Show previously analyzed contracts.")
+    p_history.add_argument("--query", default=None, help="Filter by any text (party name, contract type, etc).")
+    p_history.add_argument("--limit", type=int, default=20, help="Max rows to show (default 20).")
+    p_history.set_defaults(func=cmd_history)
+
+    p_generate = sub.add_parser("generate", help="Generate a new contract from a template, for free, offline.")
+    p_generate.add_argument("template", nargs="?", default=None, help="Template key, e.g. nda, freelance, employment, service.")
+    p_generate.add_argument("--list", action="store_true", help="List available templates and their fields.")
+    p_generate.add_argument("--field", action="append", help="Set a field value as key=value. Repeatable.")
+    p_generate.add_argument("--interactive", action="store_true", help="Prompt for any missing fields.")
+    p_generate.add_argument("--output", default=None, help="Output file path.")
+    p_generate.set_defaults(func=cmd_generate)
+
+    p_serve = sub.add_parser("serve", help="Launch a local web dashboard for drag-and-drop contract analysis.")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8765)
+    p_serve.add_argument("--provider", **common_provider)
+    p_serve.add_argument("--no-browser", action="store_true", help="Do not auto-open a browser tab.")
+    p_serve.set_defaults(func=cmd_serve)
 
     return parser
 

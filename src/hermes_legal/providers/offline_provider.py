@@ -18,6 +18,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from .base import AnalysisResult, BaseProvider
+from ..playbook import Playbook
 
 TURKISH_INDICATORS = [
     "madde", "sözleşme", "taraf", "işbu", "yüklenici",
@@ -177,8 +178,44 @@ def guess_contract_type(text: str) -> str:
 class OfflineProvider(BaseProvider):
     name = "offline"
 
+    def __init__(self, playbook: Optional[Playbook] = None):
+        self.playbook = playbook or Playbook()
+
     def is_available(self) -> bool:
         return True  # always available, no dependencies
+
+    def _effective_rules(self) -> List[Dict[str, Any]]:
+        """Merge built-in RULES with playbook overrides and custom rules."""
+        overrides = self.playbook.rule_overrides
+        merged = []
+        for rule in RULES:
+            r = dict(rule)
+            override = overrides.get(rule["name"])
+            if override:
+                if "score_if_flag" in override:
+                    r["score_if_flag"] = override["score_if_flag"]
+                if "score_if_present" in override:
+                    r["score_if_present"] = override["score_if_present"]
+                if "suggestion" in override:
+                    r["suggestion"] = override["suggestion"]
+                if "finding" in override:
+                    r["finding"] = override["finding"]
+            merged.append(r)
+
+        for custom in self.playbook.custom_rules:
+            pattern = custom.get("red_flag_pattern")
+            merged.append(
+                {
+                    "name": custom.get("name", "Custom Rule"),
+                    "presence": custom.get("presence", []),
+                    "red_flag": re.compile(pattern, re.IGNORECASE) if pattern else None,
+                    "score_if_flag": custom.get("score_if_flag", 6),
+                    "score_if_present": custom.get("score_if_present", 2),
+                    "finding": custom.get("finding", ""),
+                    "suggestion": custom.get("suggestion", ""),
+                }
+            )
+        return merged
 
     def analyze(
         self,
@@ -194,7 +231,7 @@ class OfflineProvider(BaseProvider):
         clauses: List[Dict[str, Any]] = []
         present_names: List[str] = []
 
-        for rule in RULES:
+        for rule in self._effective_rules():
             present = any(re.search(p, contract_text, re.IGNORECASE) for p in rule["presence"])
             if not present:
                 continue
@@ -231,9 +268,10 @@ class OfflineProvider(BaseProvider):
             avg = sum(c["score"] for c in clauses) / len(clauses)
         else:
             avg = 5.0
-        if avg >= 7:
-            overall_risk = "CRITICAL" if avg >= 8 else "HIGH"
-        elif avg >= 4:
+        t = self.playbook.thresholds
+        if avg >= t["high"]:
+            overall_risk = "CRITICAL" if avg >= t["critical"] else "HIGH"
+        elif avg >= t["medium"]:
             overall_risk = "MEDIUM"
         else:
             overall_risk = "LOW"
