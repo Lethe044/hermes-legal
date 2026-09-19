@@ -38,6 +38,16 @@ def test_detect_language_english():
     assert detect_language(SAMPLE_HIGH_RISK) == "EN"
 
 
+def test_detect_language_spanish():
+    text = "CONTRATO DE SERVICIOS. Las partes acuerdan el pago del contratista por el servicio."
+    assert detect_language(text) == "ES"
+
+
+def test_detect_language_german():
+    text = "Dieser Vertrag zwischen Auftragnehmer und Kunde regelt die Zahlung fuer die Dienstleistung."
+    assert detect_language(text) == "DE"
+
+
 def test_guess_contract_type():
     assert guess_contract_type(SAMPLE_HIGH_RISK) == "Freelance Service Agreement"
     assert guess_contract_type(SAMPLE_LOW_RISK) == "NDA"

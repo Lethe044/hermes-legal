@@ -24,15 +24,26 @@ TURKISH_INDICATORS = [
     "madde", "sözleşme", "taraf", "işbu", "yüklenici",
     "hizmet", "ücret", "fesih", "gizlilik", "rekabet",
 ]
+SPANISH_INDICATORS = [
+    "contrato", "cláusula", "las partes", "el presente", "contratista",
+    "servicio", "pago", "terminación", "confidencialidad", "competencia",
+]
+GERMAN_INDICATORS = [
+    "vertrag", "klausel", "vertragspartei", "auftragnehmer", "dienstleistung",
+    "zahlung", "kündigung", "vertraulichkeit", "wettbewerbsverbot", "haftung",
+]
 
 # Each rule: (clause name, patterns that indicate presence, red-flag test, score if
 # triggered, human-readable finding, generic negotiation suggestion)
 RULES: List[Dict[str, Any]] = [
     {
         "name": "Termination",
-        "presence": [r"terminat", r"fesih"],
+        "presence": [r"terminat", r"fesih", r"terminaci[oó]n", r"k[üu]ndigung"],
         "red_flag": re.compile(
-            r"(\d+)\s*-?\s*days?\s+(?:written\s+|prior\s+)?notice|(\d+)\s*-?\s*g[üu]n[lü]?[üu]?k?\s+(?:yazılı\s+)?bildirim",
+            r"(\d+)\s*-?\s*days?\s+(?:written\s+|prior\s+)?notice"
+            r"|(\d+)\s*-?\s*g[üu]n[lü]?[üu]?k?\s+(?:yazılı\s+)?bildirim"
+            r"|(\d+)\s*-?\s*d[ií]as?\s+de\s+(?:previo\s+)?aviso"
+            r"|(\d+)\s*-?\s*tage[n]?\s+(?:vorheriger\s+)?(?:schriftlicher\s+)?k[üu]ndigungsfrist",
             re.IGNORECASE,
         ),
         "threshold_days": 7,
@@ -44,8 +55,13 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Liability",
-        "presence": [r"liabilit", r"sorumluluk"],
-        "red_flag": re.compile(r"uncapped|unlimited liability|sınırsız sorumluluk", re.IGNORECASE),
+        "presence": [r"liabilit", r"sorumluluk", r"responsabilidad", r"haftung"],
+        "red_flag": re.compile(
+            r"uncapped|unlimited liability|sınırsız sorumluluk"
+            r"|responsabilidad\s+ilimitada|sin\s+l[ií]mite\s+de\s+responsabilidad"
+            r"|unbeschr[äa]nkte\s+haftung|unbegrenzte\s+haftung",
+            re.IGNORECASE,
+        ),
         "score_if_flag": 9,
         "score_if_present": 3,
         "finding": "Liability appears uncapped for at least one party.",
@@ -55,9 +71,12 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Intellectual Property",
-        "presence": [r"intellectual property", r"\bIP\b", r"fikri mülkiyet"],
+        "presence": [r"intellectual property", r"\bIP\b", r"fikri mülkiyet",
+                     r"propiedad\s+intelectual", r"geistiges\s+eigentum"],
         "red_flag": re.compile(
-            r"all work product|any work.{0,20}(created|developed)|personal time|kişisel zaman",
+            r"all work product|any work.{0,20}(created|developed)|personal time|kişisel zaman"
+            r"|todo\s+el\s+trabajo|tiempo\s+personal"
+            r"|s[äa]mtliche\s+arbeitsergebnisse|pers[öo]nlicher\s+zeit",
             re.IGNORECASE,
         ),
         "score_if_flag": 8,
@@ -68,10 +87,13 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Non-Compete",
-        "presence": [r"non-compete", r"rekabet\s+yasağı"],
+        "presence": [r"non-compete", r"rekabet\s+yasağı", r"no\s+competencia",
+                     r"cl[aá]usula\s+de\s+no\s+competencia", r"wettbewerbsverbot"],
         "red_flag": re.compile(
             r"(worldwide|global)\s+non-compete|non-compete.{0,40}(worldwide|global)"
-            r"|\b([3-9]|\d{2,})\s*-?\s*year\s+non-compete",
+            r"|\b([3-9]|\d{2,})\s*-?\s*year\s+non-compete"
+            r"|no\s+competencia\s+(mundial|global)|([3-9]|\d{2,})\s*-?\s*a[ñn]os?\s+de\s+no\s+competencia"
+            r"|weltweite[s]?\s+wettbewerbsverbot|([3-9]|\d{2,})\s*-?\s*jahre[s]?\s+wettbewerbsverbot",
             re.IGNORECASE,
         ),
         "score_if_flag": 9,
@@ -83,9 +105,12 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Auto-Renewal",
-        "presence": [r"auto-?renew", r"otomatik yenile"],
+        "presence": [r"auto-?renew", r"otomatik yenile", r"renovaci[oó]n\s+autom[aá]tica",
+                     r"automatische\s+verl[äa]ngerung"],
         "red_flag": re.compile(
-            r"(\d{1,2})\s*-?\s*day.{0,20}cancel",
+            r"(\d{1,2})\s*-?\s*day.{0,20}cancel"
+            r"|(\d{1,2})\s*-?\s*d[ií]as?.{0,20}cancelar"
+            r"|(\d{1,2})\s*-?\s*tage[n]?.{0,20}k[üu]ndigen",
             re.IGNORECASE,
         ),
         "threshold_days": 30,
@@ -97,8 +122,11 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Confidentiality",
-        "presence": [r"confidential", r"gizlilik"],
-        "red_flag": re.compile(r"perpetual|indefinite|süresiz", re.IGNORECASE),
+        "presence": [r"confidential", r"gizlilik", r"confidencialidad", r"vertraulichkeit"],
+        "red_flag": re.compile(
+            r"perpetual|indefinite|süresiz|perpetu[ao]|indefinid[ao]|unbefristet|dauerhaft",
+            re.IGNORECASE,
+        ),
         "score_if_flag": 6,
         "score_if_present": 2,
         "finding": "Confidentiality obligations may be perpetual/indefinite rather than time-bound.",
@@ -107,7 +135,7 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Payment Terms",
-        "presence": [r"payment", r"ödeme", r"invoice", r"fatura"],
+        "presence": [r"payment", r"ödeme", r"invoice", r"fatura", r"pago", r"factura", r"zahlung", r"rechnung"],
         "red_flag": re.compile(r"net\s*(6[0-9]|[7-9]\d|\d{3,})", re.IGNORECASE),
         "score_if_flag": 6,
         "score_if_present": 2,
@@ -116,9 +144,12 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Dispute Resolution",
-        "presence": [r"arbitration", r"dispute resolution", r"tahkim", r"uyuşmazlık"],
+        "presence": [r"arbitration", r"dispute resolution", r"tahkim", r"uyuşmazlık",
+                     r"arbitraje", r"resoluci[oó]n\s+de\s+disputas", r"schiedsverfahren", r"streitbeilegung"],
         "red_flag": re.compile(
-            r"(costs?|fees?)\s+(shall\s+be\s+)?(borne|paid)\s+(solely\s+)?by\s+(the\s+)?(contractor|employee|tenant|licensee)",
+            r"(costs?|fees?)\s+(shall\s+be\s+)?(borne|paid)\s+(solely\s+)?by\s+(the\s+)?(contractor|employee|tenant|licensee)"
+            r"|(costos?|honorarios?)\s+ser[aá]n\s+(asumidos|pagados)\s+(exclusivamente\s+)?por"
+            r"|kosten\s+(werden\s+)?(allein|ausschließlich)\s+von",
             re.IGNORECASE,
         ),
         "score_if_flag": 7,
@@ -129,7 +160,7 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "name": "Governing Law",
-        "presence": [r"governing law", r"uygulanacak hukuk"],
+        "presence": [r"governing law", r"uygulanacak hukuk", r"ley\s+aplicable", r"anwendbares\s+recht"],
         "red_flag": None,
         "score_if_flag": 0,
         "score_if_present": 2,
@@ -160,17 +191,25 @@ STANDARD_CLAUSES_BY_TYPE = {
 
 def detect_language(text: str) -> str:
     lower = text.lower()
-    hits = sum(1 for w in TURKISH_INDICATORS if w in lower)
-    return "TR" if hits >= 3 else "EN"
+    scores = {
+        "TR": sum(1 for w in TURKISH_INDICATORS if w in lower),
+        "ES": sum(1 for w in SPANISH_INDICATORS if w in lower),
+        "DE": sum(1 for w in GERMAN_INDICATORS if w in lower),
+    }
+    best_lang, best_score = max(scores.items(), key=lambda kv: kv[1])
+    return best_lang if best_score >= 3 else "EN"
 
 
 def guess_contract_type(text: str) -> str:
     lower = text.lower()
-    if "non-disclosure" in lower or "nda" in lower or "gizlilik sözleşmesi" in lower:
+    if ("non-disclosure" in lower or "nda" in lower or "gizlilik sözleşmesi" in lower
+            or "acuerdo de confidencialidad" in lower or "geheimhaltungsvereinbarung" in lower):
         return "NDA"
-    if "employment" in lower or "iş sözleşmesi" in lower or "employee" in lower:
+    if ("employment" in lower or "iş sözleşmesi" in lower or "employee" in lower
+            or "contrato de trabajo" in lower or "arbeitsvertrag" in lower):
         return "Employment Agreement"
-    if "freelance" in lower or "independent contractor" in lower or "serbest" in lower:
+    if ("freelance" in lower or "independent contractor" in lower or "serbest" in lower
+            or "autónomo" in lower or "freiberuflich" in lower):
         return "Freelance Service Agreement"
     return "Service Agreement"
 

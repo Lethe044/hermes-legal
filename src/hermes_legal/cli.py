@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -22,6 +23,7 @@ from .reports import (
     render_markdown_report,
     render_redline_markdown,
     write_batch_csv,
+    write_batch_dashboard,
     write_pdf_report,
     write_redline_docx,
 )
@@ -32,6 +34,14 @@ DISCLAIMER = (
     "Hermes Legal Advisor provides contract analysis, not legal advice. "
     "Always consult a qualified attorney before signing any contract."
 )
+
+
+class _NullContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
 
 def _print_result(result, contract_hash: str, trend: Optional[str]):
@@ -121,48 +131,65 @@ def cmd_analyze(args):
         sys.exit(1)
 
     playbook = Playbook.load(args.playbook) if args.playbook or DEFAULT_PLAYBOOK_PATH.exists() else Playbook()
+    quiet = args.format == "json"
 
-    console.print(f"[dim]Using provider: {provider.name}[/]")
-    with console.status("[cyan]Analyzing contract...[/]"):
+    if not quiet:
+        console.print(f"[dim]Using provider: {provider.name}[/]")
+    status_ctx = console.status("[cyan]Analyzing contract...[/]") if not quiet else _NullContext()
+    with status_ctx:
         try:
             outcome = analyze_contract(
                 text, provider=provider, perspective=args.perspective, save=not args.no_save,
                 playbook=playbook,
             )
         except ProviderError as exc:
-            console.print(f"[red]{exc}[/]")
+            if quiet:
+                print(json.dumps({"error": str(exc)}))
+            else:
+                console.print(f"[red]{exc}[/]")
             sys.exit(1)
 
     result = outcome["result"]
-    _print_result(result, outcome["hash"], outcome["trend"])
+    if quiet:
+        payload = result.to_dict()
+        payload["hash"] = outcome["hash"]
+        payload["trend"] = outcome["trend"]
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        _print_result(result, outcome["hash"], outcome["trend"])
 
     if args.output:
         report = render_markdown_report(result, outcome["hash"], outcome["trend"])
         Path(args.output).write_text(report, encoding="utf-8")
-        console.print(f"\n[dim]Report saved to {args.output}[/]")
+        if not quiet:
+            console.print(f"\n[dim]Report saved to {args.output}[/]")
 
     if args.redline:
         redline_md = render_redline_markdown(result)
         Path(args.redline).write_text(redline_md, encoding="utf-8")
-        console.print(f"[dim]Redline (Markdown) saved to {args.redline}[/]")
+        if not quiet:
+            console.print(f"[dim]Redline (Markdown) saved to {args.redline}[/]")
 
     if args.redline_docx:
         saved = write_redline_docx(result, args.redline_docx)
-        if saved:
-            console.print(f"[dim]Redline (DOCX) saved to {saved}[/]")
-        else:
-            console.print("[yellow]python-docx not installed; skipped DOCX redline. "
-                          "Install with: pip install python-docx[/]")
+        if not quiet:
+            if saved:
+                console.print(f"[dim]Redline (DOCX) saved to {saved}[/]")
+            else:
+                console.print("[yellow]python-docx not installed; skipped DOCX redline. "
+                              "Install with: pip install python-docx[/]")
 
     if args.output_pdf:
         saved = write_pdf_report(result, outcome["hash"], outcome["trend"], args.output_pdf, firm_name=playbook.firm_name)
-        if saved:
-            console.print(f"[dim]PDF report saved to {saved}[/]")
-        else:
-            console.print("[yellow]reportlab not installed; skipped PDF export. "
-                          "Install with: pip install reportlab[/]")
+        if not quiet:
+            if saved:
+                console.print(f"[dim]PDF report saved to {saved}[/]")
+            else:
+                console.print("[yellow]reportlab not installed; skipped PDF export. "
+                              "Install with: pip install reportlab[/]")
 
-    console.print(f"\n[dim]{DISCLAIMER}[/]")
+    if not quiet:
+        console.print(f"\n[dim]{DISCLAIMER}[/]")
 
     if args.fail_on_risk and result.overall_risk in [r.strip().upper() for r in args.fail_on_risk.split(",")]:
         sys.exit(2)
@@ -218,8 +245,17 @@ def cmd_batch(args):
         )
 
     csv_path = write_batch_csv(rows, reports_dir / "batch_summary.csv")
+    dashboard_path = write_batch_dashboard(rows, reports_dir / "dashboard.html")
     console.print(f"\n[bold green]Batch complete.[/] Summary: {csv_path}")
+    console.print(f"Dashboard: {dashboard_path}")
     console.print(f"Per-file reports: {reports_dir}")
+
+    if not args.no_browser:
+        import webbrowser
+        try:
+            webbrowser.open(dashboard_path.resolve().as_uri())
+        except Exception:
+            pass
 
 
 def cmd_compare(args):
@@ -255,7 +291,11 @@ def cmd_compare(args):
 def cmd_watch(args):
     from .watch import run_watch_mode
 
-    run_watch_mode(args.folder, provider_name=args.provider, perspective=args.perspective, console=console)
+    alert_on = [a.strip().upper() for a in args.alert_on.split(",")] if args.alert_on else None
+    run_watch_mode(
+        args.folder, provider_name=args.provider, perspective=args.perspective, console=console,
+        webhook_url=args.webhook, alert_on=alert_on,
+    )
 
 
 def cmd_chat(args):
@@ -365,6 +405,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--redline", help="Save a Markdown redline (only flagged clauses) to this path.")
     p_analyze.add_argument("--redline-docx", help="Save a DOCX redline memo to this path (requires python-docx).")
     p_analyze.add_argument("--playbook", default=None, help="Path to a firm playbook YAML file (default: ~/.hermes-legal/playbook.yaml if present).")
+    p_analyze.add_argument("--format", choices=["text", "json"], default="text", help="Output format for stdout (default: text).")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
         "--fail-on-risk", default=None,
@@ -377,6 +418,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch.add_argument("--provider", **common_provider)
     p_batch.add_argument("--perspective", default="neutral")
     p_batch.add_argument("--reports-dir", default=None, help="Where to write per-file reports and the CSV summary.")
+    p_batch.add_argument("--no-browser", action="store_true", help="Do not auto-open the generated HTML dashboard.")
     p_batch.set_defaults(func=cmd_batch)
 
     p_compare = sub.add_parser("compare", help="Compare two versions of a contract.")
@@ -389,6 +431,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("folder", help="Folder to watch.")
     p_watch.add_argument("--provider", **common_provider)
     p_watch.add_argument("--perspective", default="neutral")
+    p_watch.add_argument("--webhook", default=None, help="Slack or Discord incoming webhook URL for risk alerts.")
+    p_watch.add_argument("--alert-on", default="CRITICAL,HIGH", help="Comma-separated risk levels that trigger a webhook alert.")
     p_watch.set_defaults(func=cmd_watch)
 
     p_chat = sub.add_parser("chat", help="Interactive chat about your analyzed contracts.")

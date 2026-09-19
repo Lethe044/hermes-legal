@@ -30,5 +30,7 @@ jobs:
         run: |
           hermes-legal providers
           hermes-legal analyze sample_contracts/freelance_contract.txt --provider offline --no-save
+          hermes-legal analyze sample_contracts/freelance_contract.txt --provider offline --no-save --format json
+          hermes-legal batch sample_contracts --provider offline --no-browser --reports-dir /tmp/hermes_ci_batch
           hermes-legal generate nda --field party_a=Acme --field party_b=Beta --output /tmp/nda.txt
           hermes-legal playbook init --path /tmp/playbook.yaml

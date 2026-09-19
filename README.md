@@ -37,12 +37,15 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Version comparison** | Diff two drafts of the same contract clause-by-clause |
 | **Watch mode** | Monitor a folder and auto-analyze anything dropped into it |
 | **Chat mode** | Ask follow-up questions about anything already analyzed |
-| **Bilingual** | English and Turkish contract analysis, auto-detected |
 | **GitHub Action** | Drop it into any repo's CI to auto-review contract files in pull requests |
 | **Contract generator** | Draft a new NDA, freelance, employment, or service agreement from scratch, for free, offline |
 | **Web dashboard** | Drag-and-drop browser UI for non-technical users - no CLI required |
 | **Firm playbook** | Customize risk thresholds and negotiation language to match your own house style, via one YAML file |
 | **PDF reports** | Professional, brandable PDF output alongside Markdown and DOCX |
+| **Multilingual** | Analyzes contracts in English, Turkish, Spanish, and German, auto-detected |
+| **JSON output** | `--format json` for scripting and CI pipelines |
+| **Batch dashboard** | Visual HTML risk summary generated automatically for every batch run |
+| **Webhook alerts** | Watch mode can post to Slack or Discord when a high-risk contract appears |
 
 ## Risk Scoring
 
@@ -114,7 +117,18 @@ hermes-legal analyze contract.docx --redline-docx redline.docx
 hermes-legal batch ./contracts_folder
 ```
 
-Produces a `batch_summary.csv` plus one Markdown report per file.
+Produces a `batch_summary.csv`, a visual `dashboard.html` (opened
+automatically unless you pass `--no-browser`), and one Markdown report
+per file.
+
+### Scripting / CI integration
+
+```bash
+hermes-legal analyze contract.txt --format json
+```
+
+Prints the full structured result as JSON to stdout instead of a
+formatted table - pipe it into `jq`, a script, or another tool.
 
 ### Version comparison
 
@@ -126,7 +140,12 @@ hermes-legal compare sample_contracts/freelance_contract.txt sample_contracts/fr
 
 ```bash
 hermes-legal watch ./contracts_inbox
+hermes-legal watch ./contracts_inbox --webhook https://hooks.slack.com/services/... --alert-on CRITICAL,HIGH
 ```
+
+The `--webhook` flag posts an alert to Slack or Discord whenever a newly
+dropped contract scores one of the risk levels in `--alert-on` (default:
+CRITICAL and HIGH).
 
 ### Chat mode
 
