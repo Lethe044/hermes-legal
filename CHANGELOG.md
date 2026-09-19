@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.3.0] - Unreleased
+
+### Added
+- Document-grounded question answering (`hermes-legal ask <file> "<question>"`):
+  ask a specific contract a direct question, with an offline keyword-search
+  fallback when no LLM provider is configured.
+- Plain-English explanations (`--explain` on `analyze`): translates legal
+  jargon into everyday language for every flagged clause, entirely offline.
+- Automatic provider fallback: if the selected or auto-detected provider
+  fails (rate limit, outage, missing dependency), analysis automatically
+  retries with the next available provider instead of erroring out.
+  Disable with `--no-fallback`.
+- Deadline tracking (`hermes-legal deadlines`): extracts contract terms,
+  auto-renewal cancellation windows, and termination notice periods from
+  every analyzed contract and lists them soonest-first.
+- New `deadlines.py` and `explanations.py` modules, plus `ask.py`.
+
 ## [2.2.0] - Unreleased
 
 ### Added

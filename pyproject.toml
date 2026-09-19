@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-legal-advisor"
-version = "2.2.0"
+version = "2.3.0"
 description = "Free, multi-provider AI contract analysis toolkit: scores risk, suggests redlines, and gives a sign/negotiate/reject verdict."
 readme = "README.md"
 requires-python = ">=3.9"

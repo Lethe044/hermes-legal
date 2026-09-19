@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Dict, List, Optional
 
+from ..deadlines import extract_obligations
+from ..explanations import attach_explanations
 from ..memory.store import MemoryStore
 from ..playbook import Playbook
-from ..providers import AnalysisResult, BaseProvider, get_provider
+from ..providers import AUTO_DETECT_ORDER, PROVIDER_REGISTRY, AnalysisResult, BaseProvider, get_provider
 from .risk import RISK_RANK
 
 
@@ -29,6 +31,35 @@ def _memory_context_for(memory: MemoryStore, text: str, limit: int = 5) -> str:
     return "\n".join(lines)
 
 
+def _analyze_with_fallback(
+    provider: BaseProvider, text: str, perspective: str, context: str
+) -> tuple[AnalysisResult, Optional[str]]:
+    """
+    Try the given provider first. If it raises, fall back through
+    AUTO_DETECT_ORDER (skipping the one that just failed) until one
+    succeeds or all are exhausted. Returns (result, fallback_note) where
+    fallback_note is None unless a fallback actually happened.
+    """
+    try:
+        return provider.analyze(text, perspective=perspective, memory_context=context), None
+    except Exception as first_exc:
+        tried = {provider.name}
+        for candidate_name in AUTO_DETECT_ORDER:
+            if candidate_name in tried:
+                continue
+            candidate = PROVIDER_REGISTRY[candidate_name]()
+            if not candidate.is_available():
+                continue
+            tried.add(candidate_name)
+            try:
+                result = candidate.analyze(text, perspective=perspective, memory_context=context)
+                note = f"Provider '{provider.name}' failed ({first_exc}); fell back to '{candidate_name}'."
+                return result, note
+            except Exception:
+                continue
+        raise first_exc
+
+
 def analyze_contract(
     text: str,
     provider: Optional[BaseProvider] = None,
@@ -38,6 +69,8 @@ def analyze_contract(
     use_memory: bool = True,
     save: bool = True,
     playbook: Optional[Playbook] = None,
+    explain: bool = False,
+    allow_fallback: bool = True,
 ) -> Dict[str, Any]:
     """
     Run a full analysis pipeline over contract text and return a dict with
@@ -55,8 +88,16 @@ def analyze_contract(
     if addendum:
         context = f"{context}\n\nFirm playbook instructions:\n{addendum}" if context else addendum
 
-    result: AnalysisResult = provider.analyze(text, perspective=perspective, memory_context=context)
+    if allow_fallback:
+        result, fallback_note = _analyze_with_fallback(provider, text, perspective, context)
+    else:
+        result, fallback_note = provider.analyze(text, perspective=perspective, memory_context=context), None
+
+    if explain:
+        result.clauses = attach_explanations(result.clauses)
+
     h = file_hash(text)
+    obligations = extract_obligations(text)
 
     trend = None
     if use_memory:
@@ -85,6 +126,7 @@ def analyze_contract(
                 "findings_count": len(result.clauses),
                 "provider": result.provider,
                 "perspective": perspective,
+                "obligations": obligations,
             }
         )
 
@@ -93,6 +135,8 @@ def analyze_contract(
         "hash": h,
         "trend": trend,
         "red_flags": [c for c in result.clauses if c.get("is_red_flag")],
+        "obligations": obligations,
+        "fallback_note": fallback_note,
     }
 
 

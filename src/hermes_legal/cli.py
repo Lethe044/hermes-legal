@@ -82,6 +82,12 @@ def _print_result(result, contract_hash: str, trend: Optional[str]):
             )
         console.print(ct)
 
+        if any(c.get("plain_explanation") for c in result.clauses):
+            console.print("\n[bold cyan]In Plain English:[/]")
+            for c in result.clauses:
+                if c.get("plain_explanation"):
+                    console.print(f"  [bold]{c.get('name')}:[/] {c.get('plain_explanation')}")
+
     if result.missing_clauses:
         console.print("\n[bold yellow]Missing Clauses:[/]")
         for m in result.missing_clauses:
@@ -140,7 +146,7 @@ def cmd_analyze(args):
         try:
             outcome = analyze_contract(
                 text, provider=provider, perspective=args.perspective, save=not args.no_save,
-                playbook=playbook,
+                playbook=playbook, explain=args.explain, allow_fallback=not args.no_fallback,
             )
         except ProviderError as exc:
             if quiet:
@@ -150,6 +156,8 @@ def cmd_analyze(args):
             sys.exit(1)
 
     result = outcome["result"]
+    if outcome.get("fallback_note") and not quiet:
+        console.print(f"[yellow]{outcome['fallback_note']}[/]")
     if quiet:
         payload = result.to_dict()
         payload["hash"] = outcome["hash"]
@@ -380,6 +388,60 @@ def cmd_serve(args):
     run_server(host=args.host, port=args.port, provider_name=args.provider, open_browser=not args.no_browser)
 
 
+def cmd_ask(args):
+    from .ask import ask_contract
+
+    if not Path(args.contract).exists():
+        console.print(f"[red]File not found: {args.contract}[/]")
+        sys.exit(1)
+    try:
+        text = read_document(args.contract)
+    except Exception as exc:
+        console.print(f"[red]Could not read {args.contract}: {exc}[/]")
+        sys.exit(1)
+
+    provider = get_provider(args.provider)
+    with console.status(f"[cyan]Asking {provider.name}...[/]"):
+        try:
+            answer = ask_contract(text, args.question, provider)
+        except Exception as exc:
+            console.print(f"[red]Error: {exc}[/]")
+            sys.exit(1)
+
+    console.print(Panel(answer, title=args.question, border_style="cyan"))
+    console.print(f"\n[dim]{DISCLAIMER}[/]")
+
+
+def cmd_deadlines(args):
+    memory = MemoryStore()
+    obligations = memory.all_obligations()
+    dated = [o for o in obligations if o.get("days") is not None]
+    dated.sort(key=lambda o: o["days"])
+
+    if not dated:
+        console.print("[yellow]No time-bound obligations extracted yet. Analyze some contracts first.[/]")
+        return
+
+    t = Table(title="Upcoming / Notable Obligations (soonest first)", box=box.SIMPLE, header_style="bold")
+    for col in ("Kind", "Description", "~Days", "Contract Type", "Parties", "Analyzed"):
+        t.add_column(col)
+    for o in dated[: args.limit]:
+        t.add_row(
+            str(o.get("kind", "")),
+            str(o.get("description", "")),
+            str(o.get("days", "")),
+            str(o.get("contract_type", "")),
+            str(o.get("parties", ""))[:30],
+            str(o.get("analyzed_at", ""))[:10],
+        )
+    console.print(t)
+    console.print(
+        "\n[dim]Days are approximate durations extracted from contract text "
+        "(term length, notice period, renewal window) - not calendar deadlines "
+        "unless an explicit date was also found in the contract.[/]"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hermes-legal",
@@ -406,6 +468,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--redline-docx", help="Save a DOCX redline memo to this path (requires python-docx).")
     p_analyze.add_argument("--playbook", default=None, help="Path to a firm playbook YAML file (default: ~/.hermes-legal/playbook.yaml if present).")
     p_analyze.add_argument("--format", choices=["text", "json"], default="text", help="Output format for stdout (default: text).")
+    p_analyze.add_argument("--explain", action="store_true", help="Add plain-English explanations of each clause category.")
+    p_analyze.add_argument("--no-fallback", action="store_true", help="Do not automatically fall back to another provider if the chosen one fails.")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
         "--fail-on-risk", default=None,
@@ -467,6 +531,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--provider", **common_provider)
     p_serve.add_argument("--no-browser", action="store_true", help="Do not auto-open a browser tab.")
     p_serve.set_defaults(func=cmd_serve)
+
+    p_ask = sub.add_parser("ask", help="Ask a specific contract a direct question.")
+    p_ask.add_argument("contract", help="Path to a .txt, .md, .pdf, or .docx contract file.")
+    p_ask.add_argument("question", help="Your question, e.g. 'what is the termination notice period?'")
+    p_ask.add_argument("--provider", **common_provider)
+    p_ask.set_defaults(func=cmd_ask)
+
+    p_deadlines = sub.add_parser("deadlines", help="List time-bound obligations extracted from analyzed contracts.")
+    p_deadlines.add_argument("--limit", type=int, default=20)
+    p_deadlines.set_defaults(func=cmd_deadlines)
 
     return parser
 

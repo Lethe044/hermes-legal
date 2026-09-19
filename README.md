@@ -46,6 +46,10 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **JSON output** | `--format json` for scripting and CI pipelines |
 | **Batch dashboard** | Visual HTML risk summary generated automatically for every batch run |
 | **Webhook alerts** | Watch mode can post to Slack or Discord when a high-risk contract appears |
+| **Ask mode** | Ask a specific contract a direct question, grounded in that document's own text |
+| **Plain-English mode** | `--explain` translates legal jargon into everyday language for each flagged clause |
+| **Provider fallback** | If your chosen provider fails (rate limit, outage), it automatically retries with the next available one |
+| **Deadline tracking** | Extracts term lengths, renewal windows, and notice periods across every contract you've analyzed |
 
 ## Risk Scoring
 
@@ -146,6 +150,36 @@ hermes-legal watch ./contracts_inbox --webhook https://hooks.slack.com/services/
 The `--webhook` flag posts an alert to Slack or Discord whenever a newly
 dropped contract scores one of the risk levels in `--alert-on` (default:
 CRITICAL and HIGH).
+
+### Ask a contract a direct question
+
+```bash
+hermes-legal ask contract.pdf "what is the termination notice period?"
+```
+
+With an LLM provider configured, this grounds the answer in the actual
+contract text. With the offline provider, it falls back to a free
+keyword search over the document instead of guessing.
+
+### Plain-English explanations
+
+```bash
+hermes-legal analyze contract.txt --explain
+```
+
+Adds an "In Plain English" section translating each flagged clause's
+legal language into everyday terms - useful for anyone who isn't a lawyer.
+
+### Track deadlines across every contract
+
+```bash
+hermes-legal deadlines
+```
+
+Lists term lengths, auto-renewal cancellation windows, and termination
+notice periods extracted from every contract you've analyzed, soonest
+first - so you don't have to reread old contracts to remember what's
+coming up.
 
 ### Chat mode
 

@@ -44,6 +44,21 @@ class MemoryStore:
     def contracts(self) -> List[Dict[str, Any]]:
         return [e for e in self.all_entries() if e.get("type") == "contract_analyzed"]
 
+    def all_obligations(self) -> List[Dict[str, Any]]:
+        """Flatten every contract's extracted obligations into one list, each
+        tagged with which contract and when it was analyzed."""
+        out = []
+        for c in self.contracts():
+            for ob in c.get("obligations", []) or []:
+                out.append({
+                    **ob,
+                    "contract_type": c.get("contract_type"),
+                    "parties": c.get("parties"),
+                    "analyzed_at": c.get("timestamp"),
+                    "contract_hash": c.get("contract_hash"),
+                })
+        return out
+
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         q = query.lower()
         matches = [e for e in self.all_entries() if q in json.dumps(e, ensure_ascii=False).lower()]
