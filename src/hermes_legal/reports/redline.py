@@ -72,3 +72,55 @@ def write_redline_docx(result: AnalysisResult, out_path: str | Path) -> Optional
 
     document.save(str(out_path))
     return out_path
+
+
+def write_redline_docx_inline(original_path: str | Path, result: AnalysisResult, out_path: str | Path) -> Optional[Path]:
+    """
+    Take the user's actual original .docx file and insert Hermes'
+    suggestions directly after the paragraph that appears to match each
+    flagged clause, rather than producing a separate memo. Matching is a
+    simple case-insensitive keyword search for the clause name (or common
+    section headings), so it works without needing exact paragraph
+    boundaries from the LLM. Falls back gracefully (returns None) if
+    python-docx isn't installed or the clause can't be located.
+    """
+    try:
+        import docx
+        from docx.shared import RGBColor
+    except ImportError:
+        return None
+
+    original_path = Path(original_path)
+    out_path = Path(out_path)
+    document = docx.Document(str(original_path))
+
+    flagged = [c for c in result.clauses if c.get("is_red_flag") or c.get("negotiation_suggestion")]
+    inserted = 0
+    for c in flagged:
+        name = c.get("name", "")
+        keywords = [name.lower()] + name.lower().replace("-", " ").split()
+        target = None
+        for p in document.paragraphs:
+            text_lower = p.text.lower()
+            if any(kw in text_lower for kw in keywords if len(kw) > 3):
+                target = p
+                break
+        if target is None:
+            continue
+
+        new_p = document.add_paragraph()
+        run = new_p.add_run(
+            f"[HERMES LEGAL ADVISOR - {name} flagged, risk {c.get('score')}/10] "
+            f"{c.get('finding', '')} Suggested replacement: "
+            f"{c.get('negotiation_suggestion') or 'consult an attorney for specific language.'}"
+        )
+        run.italic = True
+        run.font.color.rgb = RGBColor(0xC0, 0x39, 0x2B)
+        target._p.addnext(new_p._p)
+        inserted += 1
+
+    if inserted == 0:
+        return None
+
+    document.save(str(out_path))
+    return out_path

@@ -1,5 +1,11 @@
 # Hermes Legal Advisor
 
+[![PyPI version](https://img.shields.io/pypi/v/hermes-legal-advisor.svg)](https://pypi.org/project/hermes-legal-advisor/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/hermes-legal-advisor.svg)](https://pypi.org/project/hermes-legal-advisor/)
+[![Python versions](https://img.shields.io/pypi/pyversions/hermes-legal-advisor.svg)](https://pypi.org/project/hermes-legal-advisor/)
+[![CI](https://github.com/Lethe044/hermes-legal/actions/workflows/ci.yml/badge.svg)](https://github.com/Lethe044/hermes-legal/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Free, multi-provider AI contract analysis for developers, freelancers, and small teams.**
 
 Feed it a contract - a `.txt`, `.pdf`, or `.docx` file - and it reads every clause,
@@ -50,6 +56,10 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Plain-English mode** | `--explain` translates legal jargon into everyday language for each flagged clause |
 | **Provider fallback** | If your chosen provider fails (rate limit, outage), it automatically retries with the next available one |
 | **Deadline tracking** | Extracts term lengths, renewal windows, and notice periods across every contract you've analyzed |
+| **Portfolio dashboard** | `hermes-legal portfolio` aggregates risk trends and top red flags across your entire contract history |
+| **Result caching** | Re-analyzing the exact same contract reuses the cached result instead of spending another API call |
+| **Contract packages** | `--include` merges exhibits and addenda into one analysis alongside the main agreement |
+| **True inline redlines** | `--redline-inline` inserts suggestions directly into a copy of your original .docx, not just a separate memo |
 
 ## Risk Scoring
 
@@ -181,6 +191,47 @@ notice periods extracted from every contract you've analyzed, soonest
 first - so you don't have to reread old contracts to remember what's
 coming up.
 
+### Portfolio dashboard
+
+```bash
+hermes-legal portfolio
+```
+
+Generates an HTML dashboard aggregating every contract you've ever
+analyzed: risk distribution, your most common red flags, and a
+per-counter-party breakdown with their highest risk seen and latest
+verdict. Useful for anyone tracking more than a handful of contracts.
+
+### Contract packages (main agreement + exhibits)
+
+```bash
+hermes-legal analyze main_agreement.pdf --include exhibit_a.pdf --include exhibit_b.docx
+```
+
+Merges the main file with any number of `--include` attachments and
+analyzes them as a single contract package.
+
+### Skip redundant API calls
+
+```bash
+hermes-legal analyze contract.txt --force
+```
+
+By default, re-analyzing the exact same contract text reuses the cached
+result instead of calling a paid or rate-limited API again. Pass
+`--force` to bypass the cache, or `--no-cache` to disable caching for
+one run without affecting future runs.
+
+### True inline redlines (edits your actual .docx)
+
+```bash
+hermes-legal analyze contract.docx --redline-inline redlined_contract.docx
+```
+
+Unlike `--redline-docx` (a separate memo), this inserts each suggestion
+directly into a copy of your original document, right after the clause
+it concerns - closer to what a human reviewer would hand back.
+
 ### Chat mode
 
 ```bash
@@ -296,6 +347,8 @@ hermes-legal/
   hackathon entry, and the reinforcement-learning reward function used to train it
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) - how to add a provider, a rule, or a report format
 - [`CHANGELOG.md`](CHANGELOG.md) - version history
+- [`SECURITY.md`](SECURITY.md) - supported versions and how to report a vulnerability
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) - community standards
 
 ## Contributing
 

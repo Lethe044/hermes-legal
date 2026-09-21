@@ -44,6 +44,10 @@ class MemoryStore:
     def contracts(self) -> List[Dict[str, Any]]:
         return [e for e in self.all_entries() if e.get("type") == "contract_analyzed"]
 
+    def find_by_hash(self, contract_hash: str) -> Optional[Dict[str, Any]]:
+        matches = [c for c in self.contracts() if c.get("contract_hash") == contract_hash and c.get("full_result")]
+        return matches[-1] if matches else None
+
     def all_obligations(self) -> List[Dict[str, Any]]:
         """Flatten every contract's extracted obligations into one list, each
         tagged with which contract and when it was analyzed."""

@@ -71,18 +71,43 @@ def analyze_contract(
     playbook: Optional[Playbook] = None,
     explain: bool = False,
     allow_fallback: bool = True,
+    use_cache: bool = True,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """
     Run a full analysis pipeline over contract text and return a dict with
     the AnalysisResult plus trend/memory metadata. This is the single
     function the CLI, the GitHub Action, the web dashboard, and any future
     integration all call.
+
+    If use_cache is True and this exact contract text (by hash) was
+    already analyzed before, the cached result is reused instead of
+    calling the provider again - saving a paid or rate-limited API call
+    on repeat runs. Pass force=True to bypass the cache.
     """
     playbook = playbook or Playbook()
+    memory = memory or MemoryStore()
+    h = file_hash(text)
+    obligations = extract_obligations(text)
+
+    cached = memory.find_by_hash(h) if (use_cache and not force) else None
+    if cached:
+        result = AnalysisResult(**cached["full_result"])
+        if explain:
+            result.clauses = attach_explanations(result.clauses)
+        return {
+            "result": result,
+            "hash": h,
+            "trend": None,
+            "red_flags": [c for c in result.clauses if c.get("is_red_flag")],
+            "obligations": obligations,
+            "fallback_note": None,
+            "from_cache": True,
+        }
+
     provider = provider or get_provider(provider_name)
     if provider.name == "offline":
         provider.playbook = playbook
-    memory = memory or MemoryStore()
     context = _memory_context_for(memory, text) if use_memory else ""
     addendum = playbook.prompt_addendum()
     if addendum:
@@ -95,9 +120,6 @@ def analyze_contract(
 
     if explain:
         result.clauses = attach_explanations(result.clauses)
-
-    h = file_hash(text)
-    obligations = extract_obligations(text)
 
     trend = None
     if use_memory:
@@ -127,6 +149,8 @@ def analyze_contract(
                 "provider": result.provider,
                 "perspective": perspective,
                 "obligations": obligations,
+                "flagged_clauses": [c["name"] for c in result.clauses if c.get("is_red_flag")],
+                "full_result": result.to_dict(),
             }
         )
 
@@ -137,6 +161,7 @@ def analyze_contract(
         "red_flags": [c for c in result.clauses if c.get("is_red_flag")],
         "obligations": obligations,
         "fallback_note": fallback_note,
+        "from_cache": False,
     }
 
 

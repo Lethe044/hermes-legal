@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest a new feature, rule, or provider
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to do that the tool doesn't support today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work? A new CLI flag, a new red-flag rule, a new provider, etc.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Offline rule engine
+        - LLM providers
+        - CLI
+        - Web dashboard
+        - GitHub Action
+        - Reports (Markdown/PDF/DOCX)
+        - Contract generator
+        - Playbook customization
+        - Other
+    validations:
+      required: false

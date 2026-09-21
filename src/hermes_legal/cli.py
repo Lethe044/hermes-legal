@@ -25,7 +25,9 @@ from .reports import (
     write_batch_csv,
     write_batch_dashboard,
     write_pdf_report,
+    write_portfolio_dashboard,
     write_redline_docx,
+    write_redline_docx_inline,
 )
 
 console = Console(width=min(110, __import__("shutil").get_terminal_size().columns))
@@ -130,6 +132,18 @@ def cmd_analyze(args):
         console.print(f"[red]Could not read {args.contract}: {exc}[/]")
         sys.exit(1)
 
+    for extra_path in args.include or []:
+        p = Path(extra_path)
+        if not p.exists():
+            console.print(f"[red]--include file not found: {extra_path}[/]")
+            sys.exit(1)
+        try:
+            extra_text = read_document(p)
+        except Exception as exc:
+            console.print(f"[red]Could not read {extra_path}: {exc}[/]")
+            sys.exit(1)
+        text += f"\n\n--- Exhibit: {p.name} ---\n\n{extra_text}"
+
     try:
         provider = get_provider(args.provider)
     except ProviderError as exc:
@@ -147,6 +161,7 @@ def cmd_analyze(args):
             outcome = analyze_contract(
                 text, provider=provider, perspective=args.perspective, save=not args.no_save,
                 playbook=playbook, explain=args.explain, allow_fallback=not args.no_fallback,
+                use_cache=not args.no_cache, force=args.force,
             )
         except ProviderError as exc:
             if quiet:
@@ -156,6 +171,8 @@ def cmd_analyze(args):
             sys.exit(1)
 
     result = outcome["result"]
+    if outcome.get("from_cache") and not quiet:
+        console.print("[dim]Identical contract already analyzed before - reusing cached result (no API call made). Use --force to re-analyze.[/]")
     if outcome.get("fallback_note") and not quiet:
         console.print(f"[yellow]{outcome['fallback_note']}[/]")
     if quiet:
@@ -186,6 +203,18 @@ def cmd_analyze(args):
             else:
                 console.print("[yellow]python-docx not installed; skipped DOCX redline. "
                               "Install with: pip install python-docx[/]")
+
+    if args.redline_inline:
+        if Path(args.contract).suffix.lower() != ".docx":
+            if not quiet:
+                console.print("[yellow]--redline-inline only works on .docx input files; skipped.[/]")
+        else:
+            saved = write_redline_docx_inline(args.contract, result, args.redline_inline)
+            if not quiet:
+                if saved:
+                    console.print(f"[dim]Inline redline (edited copy of your .docx) saved to {saved}[/]")
+                else:
+                    console.print("[yellow]Could not produce inline redline (python-docx missing, or no clauses could be matched in the document text).[/]")
 
     if args.output_pdf:
         saved = write_pdf_report(result, outcome["hash"], outcome["trend"], args.output_pdf, firm_name=playbook.firm_name)
@@ -442,6 +471,25 @@ def cmd_deadlines(args):
     )
 
 
+def cmd_portfolio(args):
+    memory = MemoryStore()
+    contracts = memory.contracts()
+    if not contracts:
+        console.print("[yellow]No contracts analyzed yet.[/]")
+        return
+
+    out_path = Path(args.output or "portfolio_dashboard.html")
+    saved = write_portfolio_dashboard(contracts, out_path)
+    console.print(f"[green]Portfolio dashboard written to {saved}[/] ({len(contracts)} contract(s) all-time)")
+
+    if not args.no_browser:
+        import webbrowser
+        try:
+            webbrowser.open(saved.resolve().as_uri())
+        except Exception:
+            pass
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hermes-legal",
@@ -466,10 +514,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--output-pdf", help="Save a professional PDF report to this path (requires reportlab).")
     p_analyze.add_argument("--redline", help="Save a Markdown redline (only flagged clauses) to this path.")
     p_analyze.add_argument("--redline-docx", help="Save a DOCX redline memo to this path (requires python-docx).")
+    p_analyze.add_argument("--redline-inline", help="Save an edited copy of the original .docx with suggestions inserted inline (requires .docx input and python-docx).")
     p_analyze.add_argument("--playbook", default=None, help="Path to a firm playbook YAML file (default: ~/.hermes-legal/playbook.yaml if present).")
     p_analyze.add_argument("--format", choices=["text", "json"], default="text", help="Output format for stdout (default: text).")
     p_analyze.add_argument("--explain", action="store_true", help="Add plain-English explanations of each clause category.")
     p_analyze.add_argument("--no-fallback", action="store_true", help="Do not automatically fall back to another provider if the chosen one fails.")
+    p_analyze.add_argument("--no-cache", action="store_true", help="Do not reuse a cached result for identical contract text.")
+    p_analyze.add_argument("--force", action="store_true", help="Re-analyze even if this exact contract was analyzed before (bypasses cache).")
+    p_analyze.add_argument("--include", action="append", help="Additional file(s) (exhibits/addenda) to append and analyze as one contract package. Repeatable.")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
         "--fail-on-risk", default=None,
@@ -541,6 +593,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_deadlines = sub.add_parser("deadlines", help="List time-bound obligations extracted from analyzed contracts.")
     p_deadlines.add_argument("--limit", type=int, default=20)
     p_deadlines.set_defaults(func=cmd_deadlines)
+
+    p_portfolio = sub.add_parser("portfolio", help="Generate an aggregate HTML dashboard across every contract ever analyzed.")
+    p_portfolio.add_argument("--output", default=None, help="Output HTML path (default: portfolio_dashboard.html).")
+    p_portfolio.add_argument("--no-browser", action="store_true")
+    p_portfolio.set_defaults(func=cmd_portfolio)
 
     return parser
 

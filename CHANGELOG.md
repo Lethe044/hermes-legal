@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.4.0] - Unreleased
+
+### Added
+- Portfolio dashboard (`hermes-legal portfolio`): aggregates risk
+  distribution, most common red flags, and per-counter-party history
+  across every contract ever analyzed, not just one batch run.
+- Result caching: re-analyzing identical contract text reuses the cached
+  result instead of making another API call. Disable per-run with
+  `--no-cache`, or bypass with `--force`.
+- Contract packages (`--include`): merge a main agreement with any
+  number of exhibit/addendum files into a single analysis.
+- True inline DOCX redlines (`--redline-inline`): inserts suggestions
+  directly into a copy of the original .docx next to the relevant
+  clause, instead of only producing a separate memo.
+- README badges (PyPI version, downloads, Python versions, CI status,
+  license) for a proper project landing page.
+- `SECURITY.md`, `CODE_OF_CONDUCT.md`, GitHub issue templates (bug
+  report, feature request), and a pull request template.
+- New tests for caching, the portfolio dashboard, ask mode, and inline
+  redlines (31 tests total).
+
 ## [2.3.0] - Unreleased
 
 ### Added

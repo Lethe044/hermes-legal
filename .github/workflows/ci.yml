@@ -37,3 +37,4 @@ jobs:
           hermes-legal ask sample_contracts/freelance_contract.txt "what is the termination notice period?" --provider offline
           hermes-legal analyze sample_contracts/nda_contract.txt --provider offline --explain --no-save
           hermes-legal deadlines
+          hermes-legal portfolio --no-browser --output /tmp/portfolio.html
