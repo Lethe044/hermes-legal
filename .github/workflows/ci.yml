@@ -31,10 +31,19 @@ jobs:
           hermes-legal providers
           hermes-legal analyze sample_contracts/freelance_contract.txt --provider offline --no-save
           hermes-legal analyze sample_contracts/freelance_contract.txt --provider offline --no-save --format json
-          hermes-legal batch sample_contracts --provider offline --no-browser --reports-dir /tmp/hermes_ci_batch
+          hermes-legal batch sample_contracts --provider offline --no-browser --reports-dir /tmp/hermes_ci_batch --output-xlsx /tmp/batch.xlsx
           hermes-legal generate nda --field party_a=Acme --field party_b=Beta --output /tmp/nda.txt
           hermes-legal playbook init --path /tmp/playbook.yaml
           hermes-legal ask sample_contracts/freelance_contract.txt "what is the termination notice period?" --provider offline
-          hermes-legal analyze sample_contracts/nda_contract.txt --provider offline --explain --no-save
+          hermes-legal analyze sample_contracts/nda_contract.txt --provider offline --explain --no-save --client "Test Client"
           hermes-legal deadlines
           hermes-legal portfolio --no-browser --output /tmp/portfolio.html
+          hermes-legal clients
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t hermes-legal:ci .

@@ -60,6 +60,10 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Result caching** | Re-analyzing the exact same contract reuses the cached result instead of spending another API call |
 | **Contract packages** | `--include` merges exhibits and addenda into one analysis alongside the main agreement |
 | **True inline redlines** | `--redline-inline` inserts suggestions directly into a copy of your original .docx, not just a separate memo |
+| **Real Word Track Changes** | Inline redlines use actual OOXML tracked-change markup, opening in Word's Review pane like a human edit |
+| **Client/matter tagging** | `--client` organizes contracts by client so history, portfolio, and dashboards can be filtered per client |
+| **Excel batch reports** | `--output-xlsx` produces a color-coded Excel summary, the format most firms actually work in |
+| **Docker support** | Run the web dashboard anywhere with one `docker run`, no Python install needed |
 
 ## Risk Scoring
 
@@ -231,6 +235,53 @@ hermes-legal analyze contract.docx --redline-inline redlined_contract.docx
 Unlike `--redline-docx` (a separate memo), this inserts each suggestion
 directly into a copy of your original document, right after the clause
 it concerns - closer to what a human reviewer would hand back.
+
+### True inline redlines (edits your actual .docx)
+
+```bash
+hermes-legal analyze contract.docx --redline-inline redlined_contract.docx
+```
+
+This inserts each suggestion as a real Word **Tracked Change** directly
+into a copy of your original document, right after the clause it
+concerns. Open the result in Word and it shows up in the Review pane
+exactly like a human editor's tracked edit - accept, reject, or comment
+on each one individually.
+
+### Organize by client or matter
+
+```bash
+hermes-legal analyze contract.txt --client "Acme Corp"
+hermes-legal clients
+hermes-legal history --client "Acme Corp"
+hermes-legal portfolio --client "Acme Corp"
+```
+
+Tag any analysis with `--client`, then filter history, the portfolio
+dashboard, or a batch run to just that client - useful the moment you're
+handling more than one.
+
+### Excel batch reports
+
+```bash
+hermes-legal batch ./contracts_folder --output-xlsx summary.xlsx
+```
+
+Produces a color-coded Excel workbook (risk and verdict cells shaded)
+alongside the usual CSV and HTML dashboard. Requires
+`pip install hermes-legal-advisor[xlsxreport]` (included in `[all]`).
+
+### Run it with Docker
+
+```bash
+docker build -t hermes-legal .
+docker run -p 8765:8765 -v hermes_data:/data hermes-legal
+```
+
+Starts the web dashboard at `http://localhost:8765` with zero local
+Python setup. Add `-e GROQ_API_KEY=...` (or Gemini/OpenRouter) for
+LLM-backed analysis, or leave it out to use the free offline scanner. The
+mounted volume persists analysis history across container restarts.
 
 ### Chat mode
 

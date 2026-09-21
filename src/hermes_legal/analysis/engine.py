@@ -73,6 +73,7 @@ def analyze_contract(
     allow_fallback: bool = True,
     use_cache: bool = True,
     force: bool = False,
+    client: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run a full analysis pipeline over contract text and return a dict with
@@ -151,6 +152,7 @@ def analyze_contract(
                 "obligations": obligations,
                 "flagged_clauses": [c["name"] for c in result.clauses if c.get("is_red_flag")],
                 "full_result": result.to_dict(),
+                "client": client,
             }
         )
 

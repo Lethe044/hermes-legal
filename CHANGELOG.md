@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.5.0] - Unreleased
+
+### Added
+- Real Word Track Changes: `--redline-inline` now writes actual OOXML
+  tracked-change markup (`w:ins`) instead of colored text, so suggestions
+  open in Word's Review pane like a human editor's edit.
+- Client/matter tagging (`--client` on `analyze` and `batch`): organizes
+  contracts by client, with a new `hermes-legal clients` command and
+  `--client` filtering on `history` and `portfolio`.
+- Excel batch reports (`--output-xlsx` on `batch`): a color-coded,
+  formatted `.xlsx` summary alongside the existing CSV and HTML dashboard.
+- Docker support: a `Dockerfile` that runs the web dashboard out of the
+  box, with `HERMES_LEGAL_HOME` for persisting data via a mounted volume.
+- Docker image build verification added to CI.
+- 3 new tests covering client tagging, the `HERMES_LEGAL_HOME`
+  environment variable, and Excel export (34 tests total).
+
 ## [2.4.0] - Unreleased
 
 ### Added

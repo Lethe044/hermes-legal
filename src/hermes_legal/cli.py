@@ -24,6 +24,7 @@ from .reports import (
     render_redline_markdown,
     write_batch_csv,
     write_batch_dashboard,
+    write_batch_xlsx,
     write_pdf_report,
     write_portfolio_dashboard,
     write_redline_docx,
@@ -161,7 +162,7 @@ def cmd_analyze(args):
             outcome = analyze_contract(
                 text, provider=provider, perspective=args.perspective, save=not args.no_save,
                 playbook=playbook, explain=args.explain, allow_fallback=not args.no_fallback,
-                use_cache=not args.no_cache, force=args.force,
+                use_cache=not args.no_cache, force=args.force, client=args.client,
             )
         except ProviderError as exc:
             if quiet:
@@ -255,7 +256,7 @@ def cmd_batch(args):
         console.print(f"\n[bold]-> {f.name}[/]")
         try:
             text = read_document(f)
-            outcome = analyze_contract(text, provider=provider, perspective=args.perspective, memory=memory)
+            outcome = analyze_contract(text, provider=provider, perspective=args.perspective, memory=memory, client=args.client)
         except Exception as exc:
             console.print(f"  [red]Failed: {exc}[/]")
             rows.append({"file": f.name, "contract_type": "ERROR", "overall_risk": "", "verdict": str(exc)})
@@ -285,6 +286,14 @@ def cmd_batch(args):
     dashboard_path = write_batch_dashboard(rows, reports_dir / "dashboard.html")
     console.print(f"\n[bold green]Batch complete.[/] Summary: {csv_path}")
     console.print(f"Dashboard: {dashboard_path}")
+
+    if args.output_xlsx:
+        xlsx_path = write_batch_xlsx(rows, args.output_xlsx)
+        if xlsx_path:
+            console.print(f"Excel report: {xlsx_path}")
+        else:
+            console.print("[yellow]openpyxl not installed; skipped Excel export. Install with: pip install openpyxl[/]")
+
     console.print(f"Per-file reports: {reports_dir}")
 
     if not args.no_browser:
@@ -350,6 +359,8 @@ def cmd_playbook_init(args):
 def cmd_history(args):
     memory = MemoryStore()
     contracts = memory.contracts()
+    if args.client:
+        contracts = [c for c in contracts if c.get("client") == args.client]
     if args.query:
         contracts = [c for c in contracts if args.query.lower() in str(c).lower()]
     if not contracts:
@@ -471,9 +482,26 @@ def cmd_deadlines(args):
     )
 
 
+def cmd_clients(args):
+    memory = MemoryStore()
+    clients = memory.clients()
+    if not clients:
+        console.print("[yellow]No client/matter tags found yet. Use --client when analyzing to start tagging.[/]")
+        return
+    t = Table(title="Clients / Matters", box=box.SIMPLE, header_style="bold")
+    t.add_column("Client")
+    t.add_column("Contracts")
+    for client in clients:
+        count = len(memory.find_by_client(client))
+        t.add_row(client, str(count))
+    console.print(t)
+
+
 def cmd_portfolio(args):
     memory = MemoryStore()
     contracts = memory.contracts()
+    if args.client:
+        contracts = [c for c in contracts if c.get("client") == args.client]
     if not contracts:
         console.print("[yellow]No contracts analyzed yet.[/]")
         return
@@ -522,6 +550,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--no-cache", action="store_true", help="Do not reuse a cached result for identical contract text.")
     p_analyze.add_argument("--force", action="store_true", help="Re-analyze even if this exact contract was analyzed before (bypasses cache).")
     p_analyze.add_argument("--include", action="append", help="Additional file(s) (exhibits/addenda) to append and analyze as one contract package. Repeatable.")
+    p_analyze.add_argument("--client", default=None, help="Tag this analysis with a client/matter name for portfolio and history filtering.")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
         "--fail-on-risk", default=None,
@@ -534,6 +563,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch.add_argument("--provider", **common_provider)
     p_batch.add_argument("--perspective", default="neutral")
     p_batch.add_argument("--reports-dir", default=None, help="Where to write per-file reports and the CSV summary.")
+    p_batch.add_argument("--client", default=None, help="Tag every analysis in this batch with a client/matter name.")
+    p_batch.add_argument("--output-xlsx", default=None, help="Also save a formatted Excel (.xlsx) summary (requires openpyxl).")
     p_batch.add_argument("--no-browser", action="store_true", help="Do not auto-open the generated HTML dashboard.")
     p_batch.set_defaults(func=cmd_batch)
 
@@ -564,8 +595,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_playbook_init.add_argument("--path", default=None, help="Where to write it (default: ~/.hermes-legal/playbook.yaml)")
     p_playbook_init.set_defaults(func=cmd_playbook_init)
 
+    p_clients = sub.add_parser("clients", help="List client/matter tags and how many contracts each has.")
+    p_clients.set_defaults(func=cmd_clients)
+
     p_history = sub.add_parser("history", help="Show previously analyzed contracts.")
     p_history.add_argument("--query", default=None, help="Filter by any text (party name, contract type, etc).")
+    p_history.add_argument("--client", default=None, help="Filter to only this client/matter tag.")
     p_history.add_argument("--limit", type=int, default=20, help="Max rows to show (default 20).")
     p_history.set_defaults(func=cmd_history)
 
@@ -596,6 +631,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_portfolio = sub.add_parser("portfolio", help="Generate an aggregate HTML dashboard across every contract ever analyzed.")
     p_portfolio.add_argument("--output", default=None, help="Output HTML path (default: portfolio_dashboard.html).")
+    p_portfolio.add_argument("--client", default=None, help="Restrict the dashboard to only this client/matter tag.")
     p_portfolio.add_argument("--no-browser", action="store_true")
     p_portfolio.set_defaults(func=cmd_portfolio)
 

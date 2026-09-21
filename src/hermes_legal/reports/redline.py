@@ -77,25 +77,53 @@ def write_redline_docx(result: AnalysisResult, out_path: str | Path) -> Optional
 def write_redline_docx_inline(original_path: str | Path, result: AnalysisResult, out_path: str | Path) -> Optional[Path]:
     """
     Take the user's actual original .docx file and insert Hermes'
-    suggestions directly after the paragraph that appears to match each
-    flagged clause, rather than producing a separate memo. Matching is a
-    simple case-insensitive keyword search for the clause name (or common
-    section headings), so it works without needing exact paragraph
-    boundaries from the LLM. Falls back gracefully (returns None) if
-    python-docx isn't installed or the clause can't be located.
+    suggestions as real Word "Tracked Changes" insertions, directly after
+    the paragraph that appears to match each flagged clause - not a
+    separate memo, and not just colored text. The output opens in Word's
+    Review pane like any other tracked edit: it can be accepted, rejected,
+    or commented on paragraph by paragraph.
+
+    Matching is a simple case-insensitive keyword search for the clause
+    name, so it works without needing exact paragraph boundaries from the
+    provider. Falls back gracefully (returns None) if python-docx isn't
+    installed or no clause could be located in the document text.
     """
     try:
         import docx
-        from docx.shared import RGBColor
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
     except ImportError:
         return None
+
+    import datetime
 
     original_path = Path(original_path)
     out_path = Path(out_path)
     document = docx.Document(str(original_path))
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _tracked_insertion_paragraph(text: str, change_id: int):
+        p = OxmlElement("w:p")
+        ins = OxmlElement("w:ins")
+        ins.set(qn("w:id"), str(change_id))
+        ins.set(qn("w:author"), "Hermes Legal Advisor")
+        ins.set(qn("w:date"), now_iso)
+        r = OxmlElement("w:r")
+        rpr = OxmlElement("w:rPr")
+        italic = OxmlElement("w:i")
+        rpr.append(italic)
+        r.append(rpr)
+        t = OxmlElement("w:t")
+        t.set(qn("xml:space"), "preserve")
+        t.text = text
+        r.append(t)
+        ins.append(r)
+        p.append(ins)
+        return p
 
     flagged = [c for c in result.clauses if c.get("is_red_flag") or c.get("negotiation_suggestion")]
     inserted = 0
+    change_id = 1000
     for c in flagged:
         name = c.get("name", "")
         keywords = [name.lower()] + name.lower().replace("-", " ").split()
@@ -108,15 +136,13 @@ def write_redline_docx_inline(original_path: str | Path, result: AnalysisResult,
         if target is None:
             continue
 
-        new_p = document.add_paragraph()
-        run = new_p.add_run(
-            f"[HERMES LEGAL ADVISOR - {name} flagged, risk {c.get('score')}/10] "
-            f"{c.get('finding', '')} Suggested replacement: "
-            f"{c.get('negotiation_suggestion') or 'consult an attorney for specific language.'}"
+        note_text = (
+            f"[Hermes Legal Advisor - {name}, risk {c.get('score')}/10] {c.get('finding', '')} "
+            f"Suggested: {c.get('negotiation_suggestion') or 'consult an attorney for specific language.'}"
         )
-        run.italic = True
-        run.font.color.rgb = RGBColor(0xC0, 0x39, 0x2B)
-        target._p.addnext(new_p._p)
+        new_p = _tracked_insertion_paragraph(note_text, change_id)
+        change_id += 1
+        target._p.addnext(new_p)
         inserted += 1
 
     if inserted == 0:

@@ -7,6 +7,7 @@ directory. Simple, portable, and easy to inspect or back up.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -14,7 +15,12 @@ from typing import Any, Dict, List, Optional
 
 class MemoryStore:
     def __init__(self, base_dir: Optional[Path] = None):
-        self.base_dir = base_dir or (Path.home() / ".hermes-legal")
+        if base_dir is not None:
+            self.base_dir = base_dir
+        elif os.environ.get("HERMES_LEGAL_HOME"):
+            self.base_dir = Path(os.environ["HERMES_LEGAL_HOME"])
+        else:
+            self.base_dir = Path.home() / ".hermes-legal"
         self.reports_dir = self.base_dir / "reports"
         self.memory_file = self.base_dir / "contracts_memory.jsonl"
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -47,6 +53,17 @@ class MemoryStore:
     def find_by_hash(self, contract_hash: str) -> Optional[Dict[str, Any]]:
         matches = [c for c in self.contracts() if c.get("contract_hash") == contract_hash and c.get("full_result")]
         return matches[-1] if matches else None
+
+    def find_by_client(self, client: str) -> List[Dict[str, Any]]:
+        return [c for c in self.contracts() if c.get("client") == client]
+
+    def clients(self) -> List[str]:
+        seen = []
+        for c in self.contracts():
+            client = c.get("client")
+            if client and client not in seen:
+                seen.append(client)
+        return seen
 
     def all_obligations(self) -> List[Dict[str, Any]]:
         """Flatten every contract's extracted obligations into one list, each

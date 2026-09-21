@@ -47,5 +47,6 @@ def test_write_redline_docx_inline(tmp_path):
     assert saved is not None and saved.exists()
 
     d2 = docx.Document(str(saved))
-    texts = [p.text for p in d2.paragraphs]
-    assert any("HERMES LEGAL ADVISOR" in t for t in texts)
+    xml = d2.element.xml
+    assert "<w:ins " in xml
+    assert 'w:author="Hermes Legal Advisor"' in xml
