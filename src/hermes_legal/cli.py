@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -18,7 +19,7 @@ from .analysis.risk import RISK_COLORS, RISK_ICONS, VERDICT_COLORS, VERDICT_ICON
 from .ingest import read_document, SUPPORTED_EXTENSIONS
 from .memory.store import MemoryStore
 from .playbook import DEFAULT_PLAYBOOK_PATH, Playbook, write_example_playbook
-from .providers import AUTO_DETECT_ORDER, PROVIDER_REGISTRY, ProviderError, get_provider
+from .providers import AUTO_DETECT_ORDER, PROVIDER_REGISTRY, AnalysisResult, ProviderError, get_provider
 from .reports import (
     render_markdown_report,
     render_redline_markdown,
@@ -27,6 +28,7 @@ from .reports import (
     write_batch_xlsx,
     write_pdf_report,
     write_portfolio_dashboard,
+    render_portfolio_dashboard,
     write_redline_docx,
     write_redline_docx_inline,
 )
@@ -245,19 +247,38 @@ def cmd_batch(args):
         return
 
     provider = get_provider(args.provider)
-    console.print(f"[dim]Using provider: {provider.name} | {len(files)} file(s)[/]")
+    console.print(f"[dim]Using provider: {provider.name} | {len(files)} file(s) | parallel={args.parallel}[/]")
 
     memory = MemoryStore()
-    rows = []
     reports_dir = Path(args.reports_dir) if args.reports_dir else folder / "hermes_reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    for f in files:
-        console.print(f"\n[bold]-> {f.name}[/]")
+    def _process(f: Path):
         try:
             text = read_document(f)
             outcome = analyze_contract(text, provider=provider, perspective=args.perspective, memory=memory, client=args.client)
+            return f, outcome, None
         except Exception as exc:
+            return f, None, exc
+
+    results = []
+    if args.parallel and args.parallel > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with console.status(f"[cyan]Analyzing {len(files)} contract(s) with {args.parallel} worker(s)...[/]"):
+            with ThreadPoolExecutor(max_workers=args.parallel) as executor:
+                futures = {executor.submit(_process, f): f for f in files}
+                for future in as_completed(futures):
+                    results.append(future.result())
+        results.sort(key=lambda r: r[0].name)
+    else:
+        for f in files:
+            results.append(_process(f))
+
+    rows = []
+    for f, outcome, exc in results:
+        console.print(f"\n[bold]-> {f.name}[/]")
+        if exc is not None:
             console.print(f"  [red]Failed: {exc}[/]")
             rows.append({"file": f.name, "contract_type": "ERROR", "overall_risk": "", "verdict": str(exc)})
             continue
@@ -425,7 +446,8 @@ def cmd_generate(args):
 def cmd_serve(args):
     from .webapp import run_server
 
-    run_server(host=args.host, port=args.port, provider_name=args.provider, open_browser=not args.no_browser)
+    api_key = args.api_key or os.environ.get("HERMES_LEGAL_API_KEY")
+    run_server(host=args.host, port=args.port, provider_name=args.provider, open_browser=not args.no_browser, api_key=api_key)
 
 
 def cmd_ask(args):
@@ -480,6 +502,52 @@ def cmd_deadlines(args):
         "(term length, notice period, renewal window) - not calendar deadlines "
         "unless an explicit date was also found in the contract.[/]"
     )
+
+
+def cmd_export(args):
+    import csv as csv_module
+    import io
+    import zipfile
+
+    memory = MemoryStore()
+    contracts = memory.contracts()
+    if args.client:
+        contracts = [c for c in contracts if c.get("client") == args.client]
+    contracts = [c for c in contracts if c.get("full_result")]
+    if not contracts:
+        console.print("[yellow]No matching contracts with full results found to export.[/]")
+        return
+
+    out_path = Path(args.output or f"{(args.client or 'all').replace(' ', '_')}_bundle.zip")
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i, c in enumerate(contracts, 1):
+            result = AnalysisResult(**c["full_result"])
+            report_md = render_markdown_report(result, c.get("contract_hash", ""), None)
+            safe_name = f"{i:02d}_{result.contract_type.replace(' ', '_')}_{c.get('contract_hash', '')}.md"
+            zf.writestr(safe_name, report_md)
+
+        csv_rows = [
+            {
+                "file": c.get("contract_hash", ""),
+                "contract_type": c.get("contract_type", ""),
+                "parties": c.get("parties", ""),
+                "overall_risk": c.get("risk_level", ""),
+                "verdict": c.get("verdict", ""),
+                "red_flag_count": len(c.get("flagged_clauses", []) or []),
+                "clause_count": c.get("findings_count", ""),
+                "provider": c.get("provider", ""),
+                "hash": c.get("contract_hash", ""),
+            }
+            for c in contracts
+        ]
+        buf = io.StringIO()
+        writer = csv_module.DictWriter(buf, fieldnames=list(csv_rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(csv_rows)
+        zf.writestr("summary.csv", buf.getvalue())
+        zf.writestr("dashboard.html", render_portfolio_dashboard(contracts))
+
+    console.print(f"[green]Exported {len(contracts)} contract(s) to {out_path}[/]")
 
 
 def cmd_clients(args):
@@ -565,6 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_batch.add_argument("--reports-dir", default=None, help="Where to write per-file reports and the CSV summary.")
     p_batch.add_argument("--client", default=None, help="Tag every analysis in this batch with a client/matter name.")
     p_batch.add_argument("--output-xlsx", default=None, help="Also save a formatted Excel (.xlsx) summary (requires openpyxl).")
+    p_batch.add_argument("--parallel", type=int, default=1, help="Number of contracts to analyze concurrently (useful with hosted LLM providers). Default: 1 (sequential).")
     p_batch.add_argument("--no-browser", action="store_true", help="Do not auto-open the generated HTML dashboard.")
     p_batch.set_defaults(func=cmd_batch)
 
@@ -598,6 +667,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_clients = sub.add_parser("clients", help="List client/matter tags and how many contracts each has.")
     p_clients.set_defaults(func=cmd_clients)
 
+    p_export = sub.add_parser("export", help="Bundle every report for a client (or everyone) into one ZIP.")
+    p_export.add_argument("--client", default=None, help="Only export contracts tagged with this client. Omit to export everything.")
+    p_export.add_argument("--output", default=None, help="Output ZIP path (default: <client>_bundle.zip).")
+    p_export.set_defaults(func=cmd_export)
+
     p_history = sub.add_parser("history", help="Show previously analyzed contracts.")
     p_history.add_argument("--query", default=None, help="Filter by any text (party name, contract type, etc).")
     p_history.add_argument("--client", default=None, help="Filter to only this client/matter tag.")
@@ -617,6 +691,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8765)
     p_serve.add_argument("--provider", **common_provider)
     p_serve.add_argument("--no-browser", action="store_true", help="Do not auto-open a browser tab.")
+    p_serve.add_argument("--api-key", default=None, help="Require this key (header X-API-Key or ?key= in the URL) to use the dashboard. Also read from HERMES_LEGAL_API_KEY. Strongly recommended if binding to a non-localhost host.")
     p_serve.set_defaults(func=cmd_serve)
 
     p_ask = sub.add_parser("ask", help="Ask a specific contract a direct question.")

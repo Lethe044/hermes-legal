@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.6.0] - Unreleased
+
+### Added
+- API key protection for the web dashboard (`hermes-legal serve --api-key`,
+  or `HERMES_LEGAL_API_KEY`): required for every `/api/*` call via
+  `X-API-Key` header or `?key=` query param, so `serve` can be exposed
+  beyond localhost (e.g. in Docker) without leaving it wide open.
+- Parallel batch processing (`hermes-legal batch --parallel N`): analyzes
+  multiple contracts concurrently using a thread pool, meaningfully
+  faster with hosted providers where each analysis is a network call.
+- Client bundle export (`hermes-legal export --client "..."`): zips every
+  stored report, a CSV summary, and an HTML dashboard for one client (or
+  everyone) into a single file.
+- 4 new tests covering dashboard auth and export bundling (38 tests total).
+
 ## [2.5.0] - Unreleased
 
 ### Added

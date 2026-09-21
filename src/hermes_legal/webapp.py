@@ -18,6 +18,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 from .analysis.engine import analyze_contract
 from .ingest import read_document
@@ -95,6 +96,9 @@ INDEX_HTML = """<!doctype html>
   </div>
 
 <script>
+const API_KEY = new URLSearchParams(location.search).get('key') || '';
+const authHeaders = API_KEY ? {'X-API-Key': API_KEY} : {};
+
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 const statusEl = document.getElementById('status');
@@ -120,7 +124,7 @@ function handleFile(file) {
     try {
       const resp = await fetch('/api/analyze', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', ...authHeaders},
         body: JSON.stringify({
           filename: file.name,
           content_base64: base64,
@@ -164,7 +168,7 @@ function renderResult(data) {
 }
 
 async function showHistory() {
-  const resp = await fetch('/api/history');
+  const resp = await fetch('/api/history', {headers: authHeaders});
   const data = await resp.json();
   if (!data.length) { historyBox.innerHTML = '<p>No contracts analyzed yet.</p>'; return; }
   let html = '<h2>History</h2><table><tr><th>Date</th><th>Type</th><th>Parties</th><th>Risk</th><th>Verdict</th></tr>';
@@ -184,9 +188,20 @@ async function showHistory() {
 
 class _Handler(BaseHTTPRequestHandler):
     provider_name = "auto"
+    api_key: Optional[str] = None
 
     def log_message(self, fmt, *args):
         pass  # keep stdout clean; rely on CLI output instead
+
+    def _is_authorized(self) -> bool:
+        if not self.api_key:
+            return True
+        header_key = self.headers.get("X-API-Key")
+        if header_key and header_key == self.api_key:
+            return True
+        query = parse_qs(urlparse(self.path).query)
+        query_key = query.get("key", [None])[0]
+        return query_key == self.api_key
 
     def _send_json(self, payload: dict, status: int = 200):
         body = json.dumps(payload).encode("utf-8")
@@ -197,22 +212,29 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
+        path = urlparse(self.path).path
+        if path == "/" or path == "/index.html":
             body = INDEX_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif self.path == "/api/history":
+        elif path == "/api/history":
+            if not self._is_authorized():
+                self._send_json({"error": "unauthorized"}, status=401)
+                return
             memory = MemoryStore()
             self._send_json(memory.contracts())
         else:
             self._send_json({"error": "not found"}, status=404)
 
     def do_POST(self):
-        if self.path != "/api/analyze":
+        if urlparse(self.path).path != "/api/analyze":
             self._send_json({"error": "not found"}, status=404)
+            return
+        if not self._is_authorized():
+            self._send_json({"error": "unauthorized"}, status=401)
             return
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -242,15 +264,28 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=500)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8765, provider_name: str = "auto", open_browser: bool = True):
+def run_server(
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    provider_name: str = "auto",
+    open_browser: bool = True,
+    api_key: Optional[str] = None,
+):
     _Handler.provider_name = provider_name
+    _Handler.api_key = api_key
     server = ThreadingHTTPServer((host, port), _Handler)
     url = f"http://{host}:{port}"
-    print(f"Hermes Legal Advisor dashboard running at {url}")
+    if api_key:
+        url_with_key = f"{url}/?key={api_key}"
+        print(f"Hermes Legal Advisor dashboard running at {url} (API key required)")
+        print(f"Open with the key already filled in: {url_with_key}")
+    else:
+        url_with_key = url
+        print(f"Hermes Legal Advisor dashboard running at {url}")
     print("Press Ctrl+C to stop.")
 
     if open_browser:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.5, lambda: webbrowser.open(url_with_key)).start()
 
     try:
         server.serve_forever()

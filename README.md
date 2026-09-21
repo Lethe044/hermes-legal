@@ -64,6 +64,9 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Client/matter tagging** | `--client` organizes contracts by client so history, portfolio, and dashboards can be filtered per client |
 | **Excel batch reports** | `--output-xlsx` produces a color-coded Excel summary, the format most firms actually work in |
 | **Docker support** | Run the web dashboard anywhere with one `docker run`, no Python install needed |
+| **API key protection** | Optional `--api-key` on `serve` for safely exposing the dashboard beyond localhost |
+| **Parallel batch mode** | `--parallel N` analyzes multiple contracts concurrently, much faster with hosted providers |
+| **Client bundles** | `hermes-legal export` zips every report for a client into one file to send |
 
 ## Risk Scoring
 
@@ -282,6 +285,38 @@ Starts the web dashboard at `http://localhost:8765` with zero local
 Python setup. Add `-e GROQ_API_KEY=...` (or Gemini/OpenRouter) for
 LLM-backed analysis, or leave it out to use the free offline scanner. The
 mounted volume persists analysis history across container restarts.
+
+### Protect the dashboard with an API key
+
+```bash
+hermes-legal serve --host 0.0.0.0 --api-key mysecret
+```
+
+Required if you expose `serve` beyond `127.0.0.1` (a shared server, a
+Docker container on a network others can reach). Every API call needs
+`X-API-Key: mysecret`, or you can open
+`http://host:8765/?key=mysecret` and the page fills it in automatically.
+Can also be set via `HERMES_LEGAL_API_KEY`.
+
+### Speed up large batches
+
+```bash
+hermes-legal batch ./contracts_folder --parallel 5
+```
+
+Analyzes multiple contracts concurrently instead of one at a time -
+mainly useful with a hosted provider (Groq, Gemini, OpenRouter) where
+each analysis is a network call. Defaults to sequential (`--parallel 1`).
+
+### Bundle everything for a client
+
+```bash
+hermes-legal export --client "Acme Corp" --output acme_bundle.zip
+```
+
+Zips every stored report, a CSV summary, and an HTML dashboard for one
+client (or everyone, if `--client` is omitted) into a single file ready
+to email or archive.
 
 ### Chat mode
 
