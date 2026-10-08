@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.7.0] - Unreleased
+
+### Added
+- OCR fallback for scanned PDFs: when a PDF has no extractable text,
+  it is read via pytesseract and pdf2image instead of failing. New `ocr`
+  extra, `--no-ocr` flag to disable, and OCR system packages added to the
+  Docker image and CI.
+- The GitHub Action can now post (and update) the risk summary as a
+  comment directly on the pull request via the new `github-token` input.
+- English / Turkish language toggle in the web dashboard, remembered
+  between visits.
+- 2 new tests covering OCR (40 tests total).
+
 ## [2.6.0] - Unreleased
 
 ### Added

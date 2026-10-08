@@ -67,6 +67,9 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **API key protection** | Optional `--api-key` on `serve` for safely exposing the dashboard beyond localhost |
 | **Parallel batch mode** | `--parallel N` analyzes multiple contracts concurrently, much faster with hosted providers |
 | **Client bundles** | `hermes-legal export` zips every report for a client into one file to send |
+| **OCR for scanned PDFs** | Scanned contracts with no text layer are read automatically via OCR instead of failing |
+| **PR comments** | The GitHub Action posts (and updates) the risk summary as a comment right on the pull request |
+| **English / Turkish dashboard** | The web dashboard has a one-click language toggle that remembers your choice |
 
 ## Risk Scoring
 
@@ -318,6 +321,18 @@ Zips every stored report, a CSV summary, and an HTML dashboard for one
 client (or everyone, if `--client` is omitted) into a single file ready
 to email or archive.
 
+### Scanned PDFs (OCR)
+
+```bash
+hermes-legal analyze scanned_contract.pdf
+```
+
+If a PDF has no extractable text, Hermes falls back to OCR automatically.
+This needs the optional `ocr` extra (`pip install hermes-legal-advisor[ocr]`,
+included in `[all]`) plus the system packages `tesseract-ocr` and
+`poppler-utils` (already included in the Docker image). Pass `--no-ocr` to
+skip it and get an error instead.
+
 ### Chat mode
 
 ```bash
@@ -381,6 +396,8 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # lets the action comment on the PR
     steps:
       - uses: actions/checkout@v4
       - uses: Lethe044/hermes-legal@main
@@ -388,10 +405,13 @@ jobs:
           path: contracts/
           fail-on-risk: CRITICAL
           groq-api-key: ${{ secrets.GROQ_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 No API key configured? Leave the `groq-api-key` line out entirely - the
-action still runs, using the offline scanner.
+action still runs, using the offline scanner. No `github-token`? The
+action still writes the risk summary to the job's step summary - it just
+won't post (or update) a comment directly on the pull request.
 
 ## Automatic Red Flags
 

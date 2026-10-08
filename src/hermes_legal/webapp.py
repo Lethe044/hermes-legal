@@ -63,34 +63,37 @@ INDEX_HTML = """<!doctype html>
 </style>
 </head>
 <body>
-  <h1>Hermes Legal Advisor</h1>
-  <div class="sub">Drop a contract below (.txt, .md, .pdf, .docx) for a free risk analysis.</div>
+  <div class="row" style="justify-content: space-between;">
+    <h1 id="t-title" style="margin:0;">Hermes Legal Advisor</h1>
+    <button id="langToggle" onclick="toggleLanguage()" style="padding:6px 12px;">EN / TR</button>
+  </div>
+  <div class="sub" id="t-sub">Drop a contract below (.txt, .md, .pdf, .docx) for a free risk analysis.</div>
 
   <div id="drop">
-    <p>Drag and drop a contract file here, or click to choose one</p>
+    <p id="t-drop">Drag and drop a contract file here, or click to choose one</p>
     <input type="file" id="fileInput" style="display:none" accept=".txt,.md,.pdf,.docx">
   </div>
 
   <div class="row">
-    <label for="perspective">Perspective:</label>
+    <label for="perspective" id="t-perspective-label">Perspective:</label>
     <select id="perspective">
-      <option value="neutral">Neutral</option>
-      <option value="client">Client</option>
-      <option value="vendor">Vendor</option>
-      <option value="contractor">Contractor</option>
-      <option value="employer">Employer</option>
-      <option value="employee">Employee</option>
-      <option value="tenant">Tenant</option>
-      <option value="landlord">Landlord</option>
+      <option value="neutral" id="t-opt-neutral">Neutral</option>
+      <option value="client" id="t-opt-client">Client</option>
+      <option value="vendor" id="t-opt-vendor">Vendor</option>
+      <option value="contractor" id="t-opt-contractor">Contractor</option>
+      <option value="employer" id="t-opt-employer">Employer</option>
+      <option value="employee" id="t-opt-employee">Employee</option>
+      <option value="tenant" id="t-opt-tenant">Tenant</option>
+      <option value="landlord" id="t-opt-landlord">Landlord</option>
     </select>
-    <button onclick="showHistory()">View history</button>
+    <button onclick="showHistory()" id="t-history-btn">View history</button>
   </div>
 
   <div id="status"></div>
   <div id="result"></div>
   <div id="historyBox"></div>
 
-  <div class="disclaimer">
+  <div class="disclaimer" id="t-disclaimer">
     Hermes Legal Advisor provides contract analysis, not legal advice.
     Always consult a qualified attorney before signing any contract.
   </div>
@@ -98,6 +101,66 @@ INDEX_HTML = """<!doctype html>
 <script>
 const API_KEY = new URLSearchParams(location.search).get('key') || '';
 const authHeaders = API_KEY ? {'X-API-Key': API_KEY} : {};
+
+const I18N = {
+  en: {
+    sub: "Drop a contract below (.txt, .md, .pdf, .docx) for a free risk analysis.",
+    drop: "Drag and drop a contract file here, or click to choose one",
+    perspectiveLabel: "Perspective:",
+    opts: {neutral: "Neutral", client: "Client", vendor: "Vendor", contractor: "Contractor",
+           employer: "Employer", employee: "Employee", tenant: "Tenant", landlord: "Landlord"},
+    historyBtn: "View history",
+    disclaimer: "Hermes Legal Advisor provides contract analysis, not legal advice. Always consult a qualified attorney before signing any contract.",
+    analyzing: "Analyzing ",
+    error: "Error: ",
+    noHistory: "No contracts analyzed yet.",
+    historyTitle: "History",
+    thDate: "Date", thType: "Type", thParties: "Parties", thRisk: "Risk", thVerdict: "Verdict",
+    thClause: "Clause", thScore: "Score", thFinding: "Finding",
+    missingTitle: "Missing Clauses",
+    recTitle: "Recommended Actions",
+  },
+  tr: {
+    sub: "Ücretsiz risk analizi için aşağıya bir sözleşme sürükleyin (.txt, .md, .pdf, .docx).",
+    drop: "Sözleşme dosyasını buraya sürükleyin, ya da seçmek için tıklayın",
+    perspectiveLabel: "Bakış açısı:",
+    opts: {neutral: "Tarafsız", client: "Müşteri", vendor: "Tedarikçi", contractor: "Yüklenici",
+           employer: "İşveren", employee: "Çalışan", tenant: "Kiracı", landlord: "Ev Sahibi"},
+    historyBtn: "Geçmişi görüntüle",
+    disclaimer: "Hermes Legal Advisor sözleşme analizi sunar, hukuki tavsiye vermez. Herhangi bir sözleşmeyi imzalamadan önce mutlaka yetkin bir avukata danışın.",
+    analyzing: "Analiz ediliyor: ",
+    error: "Hata: ",
+    noHistory: "Henüz analiz edilmiş sözleşme yok.",
+    historyTitle: "Geçmiş",
+    thDate: "Tarih", thType: "Tür", thParties: "Taraflar", thRisk: "Risk", thVerdict: "Karar",
+    thClause: "Madde", thScore: "Puan", thFinding: "Bulgu",
+    missingTitle: "Eksik Maddeler",
+    recTitle: "Önerilen Aksiyonlar",
+  },
+};
+let LANG = localStorage.getItem('hermes_lang') || 'en';
+
+function applyLanguage() {
+  const t = I18N[LANG];
+  document.getElementById('t-sub').textContent = t.sub;
+  document.getElementById('t-drop').textContent = t.drop;
+  document.getElementById('t-perspective-label').textContent = t.perspectiveLabel;
+  document.getElementById('t-history-btn').textContent = t.historyBtn;
+  document.getElementById('t-disclaimer').textContent = t.disclaimer;
+  for (const [key, label] of Object.entries(t.opts)) {
+    const el = document.getElementById('t-opt-' + key);
+    if (el) el.textContent = label;
+  }
+  document.documentElement.lang = LANG;
+}
+
+function toggleLanguage() {
+  LANG = LANG === 'en' ? 'tr' : 'en';
+  localStorage.setItem('hermes_lang', LANG);
+  applyLanguage();
+}
+
+applyLanguage();
 
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
@@ -118,8 +181,9 @@ fileInput.addEventListener('change', () => { if (fileInput.files.length) handleF
 function handleFile(file) {
   const reader = new FileReader();
   reader.onload = async () => {
+    const t = I18N[LANG];
     const base64 = reader.result.split(',')[1];
-    statusEl.textContent = 'Analyzing ' + file.name + ' ...';
+    statusEl.textContent = t.analyzing + file.name + ' ...';
     resultEl.style.display = 'none';
     try {
       const resp = await fetch('/api/analyze', {
@@ -132,17 +196,18 @@ function handleFile(file) {
         })
       });
       const data = await resp.json();
-      if (data.error) { statusEl.textContent = 'Error: ' + data.error; return; }
+      if (data.error) { statusEl.textContent = t.error + data.error; return; }
       statusEl.textContent = '';
       renderResult(data);
     } catch (err) {
-      statusEl.textContent = 'Error: ' + err;
+      statusEl.textContent = t.error + err;
     }
   };
   reader.readAsDataURL(file);
 }
 
 function renderResult(data) {
+  const t = I18N[LANG];
   let html = `<h2>${data.contract_type}</h2>`;
   html += `<div class="row">
     <span class="badge ${data.overall_risk}">${data.overall_risk}</span>
@@ -150,7 +215,7 @@ function renderResult(data) {
     <span>Provider: ${data.provider}</span>
   </div>`;
   html += `<p>${data.summary || ''}</p>`;
-  html += '<table><tr><th>Clause</th><th>Score</th><th></th><th>Finding</th></tr>';
+  html += `<table><tr><th>${t.thClause}</th><th>${t.thScore}</th><th></th><th>${t.thFinding}</th></tr>`;
   for (const c of data.clauses) {
     html += `<tr><td>${c.name}</td><td>${c.score}/10</td>
       <td>${c.is_red_flag ? '<span class="flag">FLAG</span>' : ''}</td>
@@ -158,20 +223,21 @@ function renderResult(data) {
   }
   html += '</table>';
   if (data.missing_clauses && data.missing_clauses.length) {
-    html += '<h3>Missing Clauses</h3><ul>' + data.missing_clauses.map(m => `<li>${m}</li>`).join('') + '</ul>';
+    html += `<h3>${t.missingTitle}</h3><ul>` + data.missing_clauses.map(m => `<li>${m}</li>`).join('') + '</ul>';
   }
   if (data.recommendations && data.recommendations.length) {
-    html += '<h3>Recommended Actions</h3><ol>' + data.recommendations.map(r => `<li>${r}</li>`).join('') + '</ol>';
+    html += `<h3>${t.recTitle}</h3><ol>` + data.recommendations.map(r => `<li>${r}</li>`).join('') + '</ol>';
   }
   resultEl.innerHTML = html;
   resultEl.style.display = 'block';
 }
 
 async function showHistory() {
+  const t = I18N[LANG];
   const resp = await fetch('/api/history', {headers: authHeaders});
   const data = await resp.json();
-  if (!data.length) { historyBox.innerHTML = '<p>No contracts analyzed yet.</p>'; return; }
-  let html = '<h2>History</h2><table><tr><th>Date</th><th>Type</th><th>Parties</th><th>Risk</th><th>Verdict</th></tr>';
+  if (!data.length) { historyBox.innerHTML = `<p>${t.noHistory}</p>`; return; }
+  let html = `<h2>${t.historyTitle}</h2><table><tr><th>${t.thDate}</th><th>${t.thType}</th><th>${t.thParties}</th><th>${t.thRisk}</th><th>${t.thVerdict}</th></tr>`;
   for (const c of data.slice().reverse()) {
     html += `<tr><td>${(c.timestamp||'').slice(0,10)}</td><td>${c.contract_type||''}</td>
       <td>${c.parties||''}</td><td><span class="badge ${c.risk_level}">${c.risk_level||''}</span></td>

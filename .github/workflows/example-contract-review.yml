@@ -12,6 +12,8 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # required for the action to comment on the PR
     steps:
       - uses: actions/checkout@v4
 
@@ -22,3 +24,4 @@ jobs:
           provider: auto
           fail-on-risk: CRITICAL
           groq-api-key: ${{ secrets.GROQ_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -130,7 +130,7 @@ def cmd_analyze(args):
         sys.exit(1)
 
     try:
-        text = read_document(args.contract)
+        text = read_document(args.contract, allow_ocr=not args.no_ocr)
     except Exception as exc:
         console.print(f"[red]Could not read {args.contract}: {exc}[/]")
         sys.exit(1)
@@ -619,6 +619,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--force", action="store_true", help="Re-analyze even if this exact contract was analyzed before (bypasses cache).")
     p_analyze.add_argument("--include", action="append", help="Additional file(s) (exhibits/addenda) to append and analyze as one contract package. Repeatable.")
     p_analyze.add_argument("--client", default=None, help="Tag this analysis with a client/matter name for portfolio and history filtering.")
+    p_analyze.add_argument("--no-ocr", action="store_true", help="Do not fall back to OCR for scanned PDFs with no extractable text.")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
         "--fail-on-risk", default=None,
