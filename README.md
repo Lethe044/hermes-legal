@@ -69,6 +69,10 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Client bundles** | `hermes-legal export` zips every report for a client into one file to send |
 | **OCR for scanned PDFs** | Scanned contracts with no text layer are read automatically via OCR instead of failing |
 | **PR comments** | The GitHub Action posts (and updates) the risk summary as a comment right on the pull request |
+| **Privacy mode** | `--redact` masks emails, phones, IBANs, ID numbers and named parties before any text goes to a hosted provider |
+| **Model clause library** | Every redline now ships with drafted replacement clause language, not just advice |
+| **Perspective-aware offline scoring** | `--perspective` changes how the offline engine scores terms, not only LLM runs |
+| **Environment check** | `hermes-legal doctor` shows exactly which features are ready and what is missing |
 | **English / Turkish dashboard** | The web dashboard has a one-click language toggle that remembers your choice |
 
 ## Risk Scoring
@@ -332,6 +336,51 @@ This needs the optional `ocr` extra (`pip install hermes-legal-advisor[ocr]`,
 included in `[all]`) plus the system packages `tesseract-ocr` and
 `poppler-utils` (already included in the Docker image). Pass `--no-ocr` to
 skip it and get an error instead.
+
+### Privacy mode for hosted providers
+
+```bash
+hermes-legal analyze contract.pdf --provider groq --redact --redact-name "Acme Corp" --redact-name "Jane Doe"
+```
+
+Before any text is sent to a hosted provider (Groq, Gemini, OpenRouter),
+emails, phone numbers, IBANs, card and ID numbers, and every name you list
+with `--redact-name` are replaced with placeholders like `[EMAIL_1]` and
+`[PARTY_1]`. Legal terms, dates, and amounts stay intact so the analysis is
+unaffected. Local providers (offline, Ollama) never send text anywhere, so
+they always get the original. This is a best-effort pattern-based safety
+net, not a guarantee: for truly privileged material, stay on the offline
+scanner or a local Ollama model.
+
+### Model clauses
+
+```bash
+hermes-legal clause
+hermes-legal clause Liability
+```
+
+Browse balanced starting-point replacement clauses for every category the
+engine checks. The same language is attached automatically to flagged
+clauses in Markdown, PDF, DOCX and Word Track Changes redlines. They are
+templates to adapt, not legal advice.
+
+### Check your setup
+
+```bash
+hermes-legal doctor
+```
+
+Lists which optional features are ready (providers, OCR, PDF/Excel/DOCX
+support, local models) and what is missing. API key values are never shown.
+
+### See exactly what changed between drafts
+
+```bash
+hermes-legal compare v1.txt v2.txt --text
+```
+
+Adds a line-by-line diff of the actual contract text on top of the
+per-clause score comparison.
 
 ### Chat mode
 

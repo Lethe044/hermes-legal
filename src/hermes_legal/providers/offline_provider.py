@@ -33,6 +33,34 @@ GERMAN_INDICATORS = [
     "zahlung", "kündigung", "vertraulichkeit", "wettbewerbsverbot", "haftung",
 ]
 
+# Perspective handling for the offline engine.
+#
+# The pattern scan finds risky language but cannot tell which party it
+# binds. These adjustments are therefore deliberately conservative: for
+# the party that usually holds the pen (hiring side), one-sided terms
+# that normally bind the service provider are softened and annotated;
+# for the service-providing side, payment and renewal terms matter a bit
+# more. Anything else is left exactly as scanned.
+HIRING_SIDE = {"client", "employer", "landlord"}
+SERVICE_SIDE = {"contractor", "employee", "vendor", "tenant"}
+PROVIDER_BOUND_CLAUSES = {"Liability", "Non-Compete", "Intellectual Property", "Dispute Resolution"}
+SERVICE_SENSITIVE_CLAUSES = {"Payment Terms", "Auto-Renewal"}
+
+
+def adjust_for_perspective(name: str, score: int, is_flag: bool, finding: str, perspective: str):
+    """Return (score, is_flag, finding) adjusted for the reviewing party."""
+    p = (perspective or "neutral").lower()
+    if p in HIRING_SIDE and is_flag and name in PROVIDER_BOUND_CLAUSES:
+        new_score = max(1, score - 3)
+        note = (f" (Reviewing as {p}: this type of term usually binds the other side, "
+                f"so it is scored lower. Confirm which party it actually binds.)")
+        return new_score, new_score >= 6, finding + note
+    if p in SERVICE_SIDE and name in SERVICE_SENSITIVE_CLAUSES and score >= 2:
+        new_score = min(10, score + 1)
+        return new_score, is_flag, finding
+    return score, is_flag, finding
+
+
 # Each rule: (clause name, patterns that indicate presence, red-flag test, score if
 # triggered, human-readable finding, generic negotiation suggestion)
 RULES: List[Dict[str, Any]] = [
@@ -290,12 +318,14 @@ class OfflineProvider(BaseProvider):
                         is_flag = True
 
             score = rule["score_if_flag"] if is_flag else rule["score_if_present"]
+            finding = rule["finding"] if is_flag else f"{rule['name']} clause present; no obvious red flag detected by pattern scan."
+            score, is_flag, finding = adjust_for_perspective(rule["name"], score, is_flag, finding, perspective)
             clauses.append(
                 {
                     "name": rule["name"],
                     "score": score,
                     "is_red_flag": is_flag,
-                    "finding": rule["finding"] if is_flag else f"{rule['name']} clause present; no obvious red flag detected by pattern scan.",
+                    "finding": finding,
                     "negotiation_suggestion": rule["suggestion"] if is_flag else "",
                 }
             )

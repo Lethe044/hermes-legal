@@ -104,6 +104,76 @@ def _print_result(result, contract_hash: str, trend: Optional[str]):
             console.print(f"  {i}. {rec}")
 
 
+def cmd_clause(args):
+    from .clause_library import MODEL_CLAUSES
+
+    if not args.name:
+        t = Table(title="Model Clauses", box=box.SIMPLE, header_style="bold")
+        t.add_column("Clause")
+        t.add_column("Preview")
+        for name, text in MODEL_CLAUSES.items():
+            t.add_row(name, text[:70] + "...")
+        console.print(t)
+        console.print("[dim]Show one in full with: hermes-legal clause <name>[/]")
+        return
+
+    match = next((n for n in MODEL_CLAUSES if n.lower() == args.name.lower()), None)
+    if match is None:
+        console.print(f"[red]No model clause named '{args.name}'. Run 'hermes-legal clause' to list them.[/]")
+        sys.exit(1)
+    console.print(Panel(MODEL_CLAUSES[match], title=match, border_style="cyan"))
+    console.print("[dim]A starting-point template. Fill in the [BRACKETED] parts and adapt it before use.[/]")
+    console.print(f"\n[dim]{DISCLAIMER}[/]")
+
+
+def cmd_doctor(args):
+    import importlib.util
+    import platform
+    import shutil
+
+    from .providers.ollama_provider import OllamaProvider
+
+    t = Table(title=f"Hermes Legal Advisor v{__version__} - environment check", box=box.SIMPLE, header_style="bold")
+    t.add_column("Check")
+    t.add_column("Status")
+    t.add_column("Detail")
+
+    def row(name, ok, detail=""):
+        t.add_row(name, "[green]ok[/]" if ok else "[yellow]missing[/]", detail)
+
+    py = platform.python_version()
+    row("Python", sys.version_info >= (3, 9), py)
+
+    modules = [
+        ("rich", "rich", "core"), ("pyyaml", "yaml", "core (playbooks)"),
+        ("groq", "groq", "Groq provider"), ("google-generativeai", "google.generativeai", "Gemini provider"),
+        ("openai", "openai", "OpenRouter provider"), ("pypdf", "pypdf", "PDF reading"),
+        ("python-docx", "docx", "DOCX reading and redlines"), ("reportlab", "reportlab", "PDF reports"),
+        ("openpyxl", "openpyxl", "Excel reports"), ("pytesseract", "pytesseract", "OCR"),
+        ("pdf2image", "pdf2image", "OCR"),
+    ]
+    for label, mod, purpose in modules:
+        try:
+            found = importlib.util.find_spec(mod) is not None
+        except (ImportError, ValueError):
+            found = False
+        row(label, found, purpose)
+
+    row("tesseract (system)", shutil.which("tesseract") is not None, "needed for OCR")
+    row("pdftoppm / poppler (system)", shutil.which("pdftoppm") is not None, "needed for OCR")
+
+    for var, label in (("GROQ_API_KEY", "Groq"), ("GEMINI_API_KEY", "Gemini"), ("OPENROUTER_API_KEY", "OpenRouter")):
+        row(f"{var}", bool(os.environ.get(var)), f"{label} key (value never shown)")
+    row("Ollama server", OllamaProvider().is_available(), "local models")
+
+    memory = MemoryStore()
+    row("Data folder", True, f"{memory.base_dir} ({len(memory.contracts())} contract(s) stored)")
+    row("Playbook", DEFAULT_PLAYBOOK_PATH.exists(), str(DEFAULT_PLAYBOOK_PATH))
+
+    console.print(t)
+    console.print("[dim]Anything marked missing is optional unless you need that feature. The offline scanner always works.[/]")
+
+
 def cmd_providers(args):
     console.print(Panel(f"Hermes Legal Advisor v{__version__} - available providers", border_style="cyan"))
     t = Table(box=box.SIMPLE, header_style="bold")
@@ -158,6 +228,8 @@ def cmd_analyze(args):
 
     if not quiet:
         console.print(f"[dim]Using provider: {provider.name}[/]")
+        if args.redact:
+            console.print("[dim]Privacy mode on: emails, phones, IBANs, ID numbers and any --redact-name values are masked before text goes to a hosted provider.[/]")
     status_ctx = console.status("[cyan]Analyzing contract...[/]") if not quiet else _NullContext()
     with status_ctx:
         try:
@@ -165,6 +237,7 @@ def cmd_analyze(args):
                 text, provider=provider, perspective=args.perspective, save=not args.no_save,
                 playbook=playbook, explain=args.explain, allow_fallback=not args.no_fallback,
                 use_cache=not args.no_cache, force=args.force, client=args.client,
+                redact=args.redact, redact_names=args.redact_name,
             )
         except ProviderError as exc:
             if quiet:
@@ -332,6 +405,25 @@ def cmd_compare(args):
 
     with console.status("[cyan]Comparing versions...[/]"):
         diff = compare_contracts(text_a, text_b, provider=provider)
+
+    if args.text:
+        import difflib
+        from rich.markup import escape
+
+        diff_lines = list(difflib.unified_diff(
+            text_a.splitlines(), text_b.splitlines(),
+            fromfile=Path(args.v1).name, tofile=Path(args.v2).name, lineterm="", n=1,
+        ))
+        console.print("\n[bold]Text changes:[/]")
+        if not diff_lines:
+            console.print("  [dim]The two files have identical text.[/]")
+        for line in diff_lines[:200]:
+            style = "green" if line.startswith("+") and not line.startswith("+++") else \
+                    "red" if line.startswith("-") and not line.startswith("---") else "dim"
+            console.print(f"[{style}]{escape(line)}[/]")
+        if len(diff_lines) > 200:
+            console.print(f"[dim]... {len(diff_lines) - 200} more diff lines not shown.[/]")
+        console.print()
 
     t = Table(title="Version Comparison", box=box.SIMPLE, header_style="bold")
     t.add_column("Clause")
@@ -619,6 +711,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--force", action="store_true", help="Re-analyze even if this exact contract was analyzed before (bypasses cache).")
     p_analyze.add_argument("--include", action="append", help="Additional file(s) (exhibits/addenda) to append and analyze as one contract package. Repeatable.")
     p_analyze.add_argument("--client", default=None, help="Tag this analysis with a client/matter name for portfolio and history filtering.")
+    p_analyze.add_argument("--redact", action="store_true", help="Privacy mode: mask emails, phones, IBANs, ID numbers and named parties before sending text to a hosted provider (Groq, Gemini, OpenRouter).")
+    p_analyze.add_argument("--redact-name", action="append", default=[], help="A name (person or company) to mask in privacy mode. Repeatable.")
     p_analyze.add_argument("--no-ocr", action="store_true", help="Do not fall back to OCR for scanned PDFs with no extractable text.")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
@@ -642,6 +736,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_compare.add_argument("v1", help="Path to the first (older) version.")
     p_compare.add_argument("v2", help="Path to the second (newer) version.")
     p_compare.add_argument("--provider", **common_provider)
+    p_compare.add_argument("--text", action="store_true", help="Also show a line-by-line diff of the actual contract text.")
     p_compare.set_defaults(func=cmd_compare)
 
     p_watch = sub.add_parser("watch", help="Watch a folder and auto-analyze new contracts dropped into it.")
@@ -667,6 +762,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_clients = sub.add_parser("clients", help="List client/matter tags and how many contracts each has.")
     p_clients.set_defaults(func=cmd_clients)
+
+    p_clause = sub.add_parser("clause", help="Browse the model replacement clause library.")
+    p_clause.add_argument("name", nargs="?", default=None, help="Clause name, e.g. Termination, Liability, Non-Compete.")
+    p_clause.set_defaults(func=cmd_clause)
+
+    p_doctor = sub.add_parser("doctor", help="Check your environment: dependencies, keys, OCR, local models.")
+    p_doctor.set_defaults(func=cmd_doctor)
 
     p_export = sub.add_parser("export", help="Bundle every report for a client (or everyone) into one ZIP.")
     p_export.add_argument("--client", default=None, help="Only export contracts tagged with this client. Omit to export everything.")

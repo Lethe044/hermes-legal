@@ -24,6 +24,8 @@ def render_redline_markdown(result: AnalysisResult) -> str:
             f"> {c.get('negotiation_suggestion') or 'Consult an attorney for specific replacement language.'}",
             "",
         ]
+        if c.get("model_language"):
+            lines += ["**Model clause (adapt before use):**", f"> {c.get('model_language')}", ""]
     return "\n".join(lines)
 
 
@@ -62,6 +64,12 @@ def write_redline_docx(result: AnalysisResult, out_path: str | Path) -> Optional
         run3 = p2.add_run(c.get("negotiation_suggestion") or "Consult an attorney for specific language.")
         run3.italic = True
         run3.font.color.rgb = RGBColor(0x1A, 0x73, 0x2E)
+
+        if c.get("model_language"):
+            p3 = document.add_paragraph()
+            run4 = p3.add_run("Model clause (adapt before use): ")
+            run4.bold = True
+            p3.add_run(c.get("model_language"))
 
     document.add_paragraph()
     footer = document.add_paragraph(
@@ -139,6 +147,7 @@ def write_redline_docx_inline(original_path: str | Path, result: AnalysisResult,
         note_text = (
             f"[Hermes Legal Advisor - {name}, risk {c.get('score')}/10] {c.get('finding', '')} "
             f"Suggested: {c.get('negotiation_suggestion') or 'consult an attorney for specific language.'}"
+            + (f" Model clause: {c.get('model_language')}" if c.get("model_language") else "")
         )
         new_p = _tracked_insertion_paragraph(note_text, change_id)
         change_id += 1

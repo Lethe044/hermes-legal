@@ -100,6 +100,8 @@ def write_pdf_report(
         story.append(Paragraph("Suggested Redlines", h2_style))
         for c in negotiations:
             story.append(Paragraph(f"<b>{c.get('name')}:</b> {c.get('negotiation_suggestion')}", body_style))
+            if c.get("model_language"):
+                story.append(Paragraph(f"<i>Model clause: {c.get('model_language')}</i>", body_style))
 
     if result.missing_clauses:
         story.append(Paragraph("Missing Standard Clauses", h2_style))

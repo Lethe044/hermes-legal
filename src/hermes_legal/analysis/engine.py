@@ -4,9 +4,11 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 from ..deadlines import extract_obligations
+from ..clause_library import attach_model_clauses
 from ..explanations import attach_explanations
 from ..memory.store import MemoryStore
 from ..playbook import Playbook
+from ..redact import is_remote_provider, redact_text
 from ..providers import AUTO_DETECT_ORDER, PROVIDER_REGISTRY, AnalysisResult, BaseProvider, get_provider
 from .risk import RISK_RANK
 
@@ -32,16 +34,26 @@ def _memory_context_for(memory: MemoryStore, text: str, limit: int = 5) -> str:
 
 
 def _analyze_with_fallback(
-    provider: BaseProvider, text: str, perspective: str, context: str
+    provider: BaseProvider, text: str, perspective: str, context: str,
+    safe_text: Optional[str] = None,
 ) -> tuple[AnalysisResult, Optional[str]]:
     """
     Try the given provider first. If it raises, fall back through
     AUTO_DETECT_ORDER (skipping the one that just failed) until one
     succeeds or all are exhausted. Returns (result, fallback_note) where
     fallback_note is None unless a fallback actually happened.
+
+    If safe_text (a redacted copy of the contract) is given, it is what
+    gets sent to any provider that sends text over the network. Local
+    providers (offline, ollama) always get the original text.
     """
+    def _text_for(p) -> str:
+        if safe_text is not None and is_remote_provider(p.name):
+            return safe_text
+        return text
+
     try:
-        return provider.analyze(text, perspective=perspective, memory_context=context), None
+        return provider.analyze(_text_for(provider), perspective=perspective, memory_context=context), None
     except Exception as first_exc:
         tried = {provider.name}
         for candidate_name in AUTO_DETECT_ORDER:
@@ -52,7 +64,7 @@ def _analyze_with_fallback(
                 continue
             tried.add(candidate_name)
             try:
-                result = candidate.analyze(text, perspective=perspective, memory_context=context)
+                result = candidate.analyze(_text_for(candidate), perspective=perspective, memory_context=context)
                 note = f"Provider '{provider.name}' failed ({first_exc}); fell back to '{candidate_name}'."
                 return result, note
             except Exception:
@@ -74,6 +86,8 @@ def analyze_contract(
     use_cache: bool = True,
     force: bool = False,
     client: Optional[str] = None,
+    redact: bool = False,
+    redact_names: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Run a full analysis pipeline over contract text and return a dict with
@@ -91,7 +105,7 @@ def analyze_contract(
     h = file_hash(text)
     obligations = extract_obligations(text)
 
-    cached = memory.find_by_hash(h) if (use_cache and not force) else None
+    cached = memory.find_by_hash(h, perspective=perspective) if (use_cache and not force) else None
     if cached:
         result = AnalysisResult(**cached["full_result"])
         if explain:
@@ -114,11 +128,17 @@ def analyze_contract(
     if addendum:
         context = f"{context}\n\nFirm playbook instructions:\n{addendum}" if context else addendum
 
-    if allow_fallback:
-        result, fallback_note = _analyze_with_fallback(provider, text, perspective, context)
-    else:
-        result, fallback_note = provider.analyze(text, perspective=perspective, memory_context=context), None
+    safe_text = None
+    if redact:
+        safe_text, _mapping = redact_text(text, names=redact_names or [])
 
+    if allow_fallback:
+        result, fallback_note = _analyze_with_fallback(provider, text, perspective, context, safe_text=safe_text)
+    else:
+        send_text = safe_text if (safe_text is not None and is_remote_provider(provider.name)) else text
+        result, fallback_note = provider.analyze(send_text, perspective=perspective, memory_context=context), None
+
+    result.clauses = attach_model_clauses(result.clauses)
     if explain:
         result.clauses = attach_explanations(result.clauses)
 

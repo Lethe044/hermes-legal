@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.8.0] - Unreleased
+
+### Added
+- Privacy mode (`--redact`, `--redact-name`): masks emails, phone numbers,
+  IBANs, card and ID numbers, and any listed names before text is sent to
+  a hosted provider. Local providers always receive the original text.
+- Model clause library with drafted replacement language for every
+  built-in rule, attached to flagged clauses in Markdown, PDF, DOCX and
+  Word Track Changes output. New `hermes-legal clause` command to browse it.
+- `hermes-legal doctor`: checks dependencies, API keys, OCR tooling and
+  local models, and says what is missing.
+- `hermes-legal compare --text`: line-by-line diff of the contract text.
+- Perspective-aware scoring in the offline engine.
+
+### Fixed
+- The result cache ignored `--perspective`, so re-analyzing the same
+  contract from a different perspective returned the old result. The
+  cache now only matches analyses made from the same perspective.
+- 14 new tests (54 total).
+
 ## [2.7.0] - Unreleased
 
 ### Added

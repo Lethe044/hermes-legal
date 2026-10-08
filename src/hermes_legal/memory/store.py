@@ -50,8 +50,14 @@ class MemoryStore:
     def contracts(self) -> List[Dict[str, Any]]:
         return [e for e in self.all_entries() if e.get("type") == "contract_analyzed"]
 
-    def find_by_hash(self, contract_hash: str) -> Optional[Dict[str, Any]]:
-        matches = [c for c in self.contracts() if c.get("contract_hash") == contract_hash and c.get("full_result")]
+    def find_by_hash(self, contract_hash: str, perspective: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Most recent stored analysis of this exact text. If perspective is given,
+        only an analysis made from that same perspective counts as a cache hit."""
+        matches = [
+            c for c in self.contracts()
+            if c.get("contract_hash") == contract_hash and c.get("full_result")
+            and (perspective is None or c.get("perspective", "neutral") == perspective)
+        ]
         return matches[-1] if matches else None
 
     def find_by_client(self, client: str) -> List[Dict[str, Any]]:

@@ -42,6 +42,10 @@ jobs:
           hermes-legal deadlines
           hermes-legal portfolio --no-browser --output /tmp/portfolio.html
           hermes-legal clients
+          hermes-legal doctor
+          hermes-legal clause Termination
+          hermes-legal analyze sample_contracts/freelance_contract.txt --provider offline --no-save --perspective client --redact --redact-name TechCorp
+          hermes-legal compare sample_contracts/freelance_contract.txt sample_contracts/freelance_contract_v2.txt --provider offline --text
           hermes-legal export --client "Test Client" --output /tmp/export_bundle.zip
 
   docker:

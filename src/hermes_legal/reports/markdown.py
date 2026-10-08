@@ -36,6 +36,8 @@ def render_markdown_report(result: AnalysisResult, contract_hash: str, trend: st
         lines += ["", "## Suggested Redlines"]
         for c in negotiations:
             lines.append(f"- **{c.get('name')}:** {c.get('negotiation_suggestion')}")
+            if c.get("model_language"):
+                lines.append(f"  - Model language: *{c.get('model_language')}*")
 
     if result.missing_clauses:
         lines += ["", "## Missing Standard Clauses"]
