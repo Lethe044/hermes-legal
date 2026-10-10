@@ -141,3 +141,93 @@ def test_redact_ids_and_cards():
     out, _ = redact_text("SSN 123-45-6789 and card 4111 1111 1111 1111.")
     assert "123-45-6789" not in out
     assert "4111" not in out
+
+
+# ---------- privacy mode reaches every command that talks to a provider ----------
+
+def _install_fake_groq():
+    import sys
+    import types
+
+    seen = {}
+
+    class FakeGroq:
+        def __init__(self, api_key=None):
+            def create(**kwargs):
+                seen["prompt"] = kwargs["messages"][-1]["content"]
+                message = types.SimpleNamespace(content="Answer.")
+                return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=create))
+
+    module = types.ModuleType("groq")
+    module.Groq = FakeGroq
+    previous = sys.modules.get("groq")
+    sys.modules["groq"] = module
+    return seen, previous
+
+
+def _restore_groq(previous):
+    import sys
+
+    if previous is None:
+        sys.modules.pop("groq", None)
+    else:
+        sys.modules["groq"] = previous
+
+
+def test_ask_redacts_text_and_question_for_remote_provider():
+    from hermes_legal.ask import ask_contract
+    from hermes_legal.providers.groq_provider import GroqProvider
+
+    seen, previous = _install_fake_groq()
+    try:
+        ask_contract(TEXT, "Who is Jane Doe and what is her email?", GroqProvider(api_key="k"),
+                     redact=True, redact_names=["Jane Doe", "Acme Corp"])
+    finally:
+        _restore_groq(previous)
+    assert "jane.doe@example.com" not in seen["prompt"]
+    assert "Jane Doe" not in seen["prompt"]
+    assert "Acme Corp" not in seen["prompt"]
+    assert "uncapped and unlimited" in seen["prompt"]
+
+
+def test_ask_without_redact_sends_original():
+    from hermes_legal.ask import ask_contract
+    from hermes_legal.providers.groq_provider import GroqProvider
+
+    seen, previous = _install_fake_groq()
+    try:
+        ask_contract(TEXT, "Who signs?", GroqProvider(api_key="k"))
+    finally:
+        _restore_groq(previous)
+    assert "jane.doe@example.com" in seen["prompt"]
+
+
+def test_every_provider_facing_command_has_privacy_flags():
+    from hermes_legal.cli import build_parser
+
+    parser = build_parser()
+    for argv in (
+        ["analyze", "x.txt", "--redact", "--redact-name", "A"],
+        ["batch", "folder", "--redact"],
+        ["watch", "folder", "--redact"],
+        ["serve", "--redact"],
+        ["ask", "x.txt", "q", "--redact"],
+        ["chat", "--redact"],
+        ["analyze", "x.txt", "--no-redact"],
+    ):
+        args = parser.parse_args(argv)
+        assert hasattr(args, "redact") and hasattr(args, "redact_name")
+
+
+def test_no_redact_overrides_a_true_default():
+    from hermes_legal.cli import build_parser
+
+    parser = build_parser()
+    parser.set_defaults()  # no-op, keeps API obvious
+    for action in parser._actions:
+        if hasattr(action, "choices") and isinstance(action.choices, dict):
+            action.choices["analyze"].set_defaults(redact=True)
+    assert parser.parse_args(["analyze", "x.txt"]).redact is True
+    assert parser.parse_args(["analyze", "x.txt", "--no-redact"]).redact is False

@@ -73,6 +73,9 @@ lock-in, and it plugs straight into your GitHub workflow as a CI check.
 | **Model clause library** | Every redline now ships with drafted replacement clause language, not just advice |
 | **Perspective-aware offline scoring** | `--perspective` changes how the offline engine scores terms, not only LLM runs |
 | **Environment check** | `hermes-legal doctor` shows exactly which features are ready and what is missing |
+| **MCP server** | `hermes-legal mcp` lets Claude Desktop and other AI assistants call contract analysis as a tool |
+| **Config file** | Set your usual provider, perspective, client and privacy mode once instead of on every command |
+| **Wider offline scanner** | 18 clause checks in English, Turkish, Spanish and German, plus party names and key terms (dates, fees, term, governing law) pulled out for free |
 | **English / Turkish dashboard** | The web dashboard has a one-click language toggle that remembers your choice |
 
 ## Risk Scoring
@@ -382,6 +385,72 @@ hermes-legal compare v1.txt v2.txt --text
 Adds a line-by-line diff of the actual contract text on top of the
 per-clause score comparison.
 
+### Use it from an AI assistant (MCP)
+
+```bash
+hermes-legal mcp --provider offline --allow-dir ~/Contracts
+```
+
+Starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio,
+so an assistant that supports MCP can analyze contracts, ask questions about
+them, fetch model clauses and read your saved history. To use it with
+Claude Desktop, add this to its MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "hermes-legal": {
+      "command": "hermes-legal",
+      "args": ["mcp", "--provider", "offline", "--allow-dir", "/path/to/Contracts"]
+    }
+  }
+}
+```
+
+It exposes five tools: `analyze_contract`, `ask_contract`, `get_model_clause`,
+`contract_history` and `list_deadlines`.
+
+Because text inside a document can try to manipulate an assistant, some
+choices are deliberately made by you, not by the assistant:
+
+- The provider and privacy mode (`--provider`, `--redact`, `--redact-name`)
+  are set when you start the server. The assistant cannot pick a hosted
+  provider or turn redaction off.
+- Files can only be read from folders you list with `--allow-dir` (or
+  `HERMES_LEGAL_MCP_ALLOW_DIRS`). With none listed, only the current folder is allowed.
+- Analyses are not saved to your history unless the assistant asks to.
+
+### Set your defaults once (config file)
+
+```bash
+hermes-legal config init
+hermes-legal config show
+```
+
+`config init` writes a fully commented-out `~/.hermes-legal/config.yaml`.
+Uncomment what you want, for example:
+
+```yaml
+provider: groq
+perspective: client
+redact: true
+redact_names: ["Acme Corp"]
+```
+
+Every command that has the matching option then uses it by default. Anything you
+type on the command line wins, and `--no-redact` / `--no-explain` switch a
+default off for a single run. A mistyped or invalid value is ignored with a
+warning on stderr, never a crash.
+
+### Analyze a whole folder tree
+
+```bash
+hermes-legal batch ./clients --recursive
+```
+
+Walks sub-folders too. Reports are named after the relative path, and the
+reports folder itself is never re-analyzed.
+
 ### Chat mode
 
 ```bash
@@ -464,13 +533,28 @@ won't post (or update) a comment directly on the pull request.
 
 ## Automatic Red Flags
 
+The offline scanner checks 18 clause categories in English, Turkish, Spanish and German.
+Red flags it looks for include:
+
 - Termination notice under 7 days
-- Uncapped liability on one party only
+- Uncapped liability
+- Broad "any and all claims" indemnification
+- Terms one party may change on its own, without the other's agreement
+- Assignment to a third party without consent
+- Exclusivity that stops one party working with anyone else
 - IP assignment covering personal-time work
 - Non-compete longer than 2 years or with worldwide scope
+- Non-solicitation longer than 2 years
 - Auto-renewal with under 30 days' cancellation window
+- Daily or weekly penalties and liquidated damages
+- Warranties disclaimed or work provided "as is"
+- Personal data shared with third parties without limits
 - Arbitration/dispute costs borne entirely by one party
 - Perpetual/indefinite confidentiality obligations
+
+It also reports which standard clauses a contract of that type is missing
+(checked against the text itself, in its own wording), and the overall risk
+is never lower than the worst single clause warrants.
 
 ## Project Structure
 
@@ -482,9 +566,14 @@ hermes-legal/
 │   ├── analysis/       # orchestration, risk scoring, version diff
 │   ├── reports/        # Markdown, CSV, DOCX redline generation
 │   ├── memory/         # JSONL-backed contract history
-│   ├── cli.py          # analyze / batch / compare / watch / chat / providers / generate / serve / playbook / history
+│   ├── cli.py          # every command, see docs/COMMANDS.md
 │   ├── generator.py    # offline contract templates (NDA, freelance, employment, service)
 │   ├── playbook.py     # firm-specific YAML customization
+│   ├── config.py       # default options from ~/.hermes-legal/config.yaml
+│   ├── extract.py      # party names and key terms, offline
+│   ├── redact.py       # privacy mode
+│   ├── clause_library.py  # model replacement clauses
+│   ├── mcp_server.py   # MCP server for AI assistants
 │   ├── webapp.py        # zero-dependency local web dashboard
 │   ├── watch.py
 │   └── chat.py
@@ -497,6 +586,7 @@ hermes-legal/
 ## Documentation
 
 - [`docs/SETUP.md`](docs/SETUP.md) - installation and configuration in depth
+- [`docs/COMMANDS.md`](docs/COMMANDS.md) - every command and option (generated from the real parser)
 - [`docs/PROVIDERS.md`](docs/PROVIDERS.md) - free-tier provider comparison and setup
 - [`docs/ADVANCED.md`](docs/ADVANCED.md) - the project's origin as a Hermes/Atropos
   hackathon entry, and the reinforcement-learning reward function used to train it

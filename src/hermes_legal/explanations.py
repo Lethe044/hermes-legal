@@ -62,6 +62,43 @@ CLAUSE_EXPLANATIONS: Dict[str, str] = {
         "expensive travel or unfamiliar legal procedure if something goes "
         "wrong."
     ),
+    "Indemnification": (
+        "This says who has to cover the other side's costs if a third party sues. "
+        "Wording like 'any and all claims' can make one party pay for problems it did not cause, "
+        "so look for whether it works both ways and whether it has a ceiling."
+    ),
+    "Amendment": (
+        "This decides how the contract can be changed later. If one party can change the terms "
+        "on its own, the deal you signed today may not be the deal you have next year."
+    ),
+    "Assignment": (
+        "This decides whether the other side can hand the contract to someone else. Without a "
+        "consent requirement, you could end up working with a company you never chose."
+    ),
+    "Exclusivity": (
+        "This can stop you from working with anyone else in a field. It is fair only when it is "
+        "limited in scope and time and you are guaranteed something in return, such as minimum fees."
+    ),
+    "Non-Solicitation": (
+        "This stops you from hiring the other side's people or approaching its customers for a "
+        "period after the contract ends. Twelve months is common; much longer limits your options."
+    ),
+    "Penalties": (
+        "This sets automatic charges for being late. Daily or weekly percentages add up fast, so "
+        "check for a grace period and a maximum total."
+    ),
+    "Warranty": (
+        "This says what promises are made about the quality of the work. 'As is' or a full "
+        "disclaimer means you may have no right to a fix if it does not work."
+    ),
+    "Force Majeure": (
+        "This covers events nobody controls, like disasters or war. It matters most when it "
+        "allows you to walk away if the event drags on."
+    ),
+    "Data Protection": (
+        "This governs what happens to personal data. Sharing it with third parties without clear "
+        "limits can create legal exposure for you under privacy laws."
+    ),
 }
 
 DEFAULT_EXPLANATION = (

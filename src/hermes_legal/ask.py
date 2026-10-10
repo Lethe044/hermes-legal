@@ -14,9 +14,10 @@ and still completely free.
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
 
 from .providers import BaseProvider
+from .redact import is_remote_provider, redact_text
 
 
 def _split_paragraphs(text: str) -> List[str]:
@@ -58,9 +59,19 @@ def _keyword_search_answer(text: str, question: str, top_n: int = 2) -> str:
     )
 
 
-def ask_contract(text: str, question: str, provider: BaseProvider) -> str:
+def ask_contract(
+    text: str,
+    question: str,
+    provider: BaseProvider,
+    redact: bool = False,
+    redact_names: Optional[List[str]] = None,
+) -> str:
     if provider.name == "offline":
         return _keyword_search_answer(text, question)
+
+    if redact and is_remote_provider(provider.name):
+        text, _ = redact_text(text, names=redact_names or [])
+        question, _ = redact_text(question, names=redact_names or [])
 
     prompt = (
         "You are Hermes Legal Advisor. Answer the following question using ONLY the "

@@ -255,6 +255,8 @@ async function showHistory() {
 class _Handler(BaseHTTPRequestHandler):
     provider_name = "auto"
     api_key: Optional[str] = None
+    redact = False
+    redact_names: list = []
 
     def log_message(self, fmt, *args):
         pass  # keep stdout clean; rely on CLI output instead
@@ -318,7 +320,10 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 text = read_document(tmp_path)
                 provider = get_provider(self.provider_name)
-                outcome = analyze_contract(text, provider=provider, perspective=perspective, playbook=Playbook())
+                outcome = analyze_contract(
+                    text, provider=provider, perspective=perspective, playbook=Playbook(),
+                    redact=self.redact, redact_names=self.redact_names,
+                )
                 result = outcome["result"]
                 data = result.to_dict()
                 data["hash"] = outcome["hash"]
@@ -336,9 +341,13 @@ def run_server(
     provider_name: str = "auto",
     open_browser: bool = True,
     api_key: Optional[str] = None,
+    redact: bool = False,
+    redact_names: Optional[list] = None,
 ):
     _Handler.provider_name = provider_name
     _Handler.api_key = api_key
+    _Handler.redact = redact
+    _Handler.redact_names = list(redact_names or [])
     server = ThreadingHTTPServer((host, port), _Handler)
     url = f"http://{host}:{port}"
     if api_key:

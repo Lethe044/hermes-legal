@@ -36,6 +36,8 @@ def run_watch_mode(
     poll_seconds: float = 2.0,
     webhook_url: Optional[str] = None,
     alert_on: Optional[list] = None,
+    redact: bool = False,
+    redact_names: Optional[list] = None,
 ):
     """Poll a folder for new contract files and analyze each one as it appears.
 
@@ -73,7 +75,10 @@ def run_watch_mode(
                 console.print(f"\n[bold]New file detected:[/] {p.name}")
                 try:
                     text = read_document(p)
-                    outcome = analyze_contract(text, provider=provider, perspective=perspective)
+                    outcome = analyze_contract(
+                        text, provider=provider, perspective=perspective,
+                        redact=redact, redact_names=redact_names,
+                    )
                     result = outcome["result"]
                     console.print(
                         f"  -> {result.overall_risk} risk, verdict {result.verdict} "

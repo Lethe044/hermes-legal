@@ -43,6 +43,9 @@ jobs:
           hermes-legal portfolio --no-browser --output /tmp/portfolio.html
           hermes-legal clients
           hermes-legal doctor
+          hermes-legal config show
+          hermes-legal batch sample_contracts --provider offline --no-browser --recursive --reports-dir /tmp/hermes_ci_recursive
+          python -m hermes_legal.docgen | diff - docs/COMMANDS.md
           hermes-legal clause Termination
           hermes-legal analyze sample_contracts/freelance_contract.txt --provider offline --no-save --perspective client --redact --redact-name TechCorp
           hermes-legal compare sample_contracts/freelance_contract.txt sample_contracts/freelance_contract_v2.txt --provider offline --text

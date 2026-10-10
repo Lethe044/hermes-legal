@@ -2,6 +2,48 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.9.0] - Unreleased
+
+### Added
+- MCP server (`hermes-legal mcp`): lets Claude Desktop and other MCP
+  assistants analyze contracts, ask questions, fetch model clauses and read
+  history as tools. Standard library only. The provider and privacy mode
+  are set by whoever starts the server, file access is limited to folders
+  given with `--allow-dir`, and nothing is saved unless asked.
+- Config file (`hermes-legal config init|show|path`): default options in
+  `~/.hermes-legal/config.yaml`. Command line flags always win; invalid
+  values are ignored with a warning. New `--no-redact` and `--no-explain`.
+- Nine new offline checks: indemnification, unilateral amendment,
+  assignment, exclusivity, non-solicitation, penalties, warranty, force
+  majeure and data protection, with English, Turkish, Spanish and German
+  patterns, model clauses and plain-English explanations.
+- Offline party names and key terms (effective date, term, notice, fees,
+  payment due, governing law), also used to fill anything a provider
+  leaves blank. Trend detection and the portfolio now work offline.
+- Lease and software/SaaS contract types with their own expected clauses.
+- `batch --recursive`.
+- Generated command reference (`docs/COMMANDS.md`) with a test that keeps
+  it in sync with the real command line.
+
+### Changed
+- Overall risk is never lower than the worst single clause warrants. A
+  contract with one critical clause among many harmless ones is no longer
+  reported as LOW, so some results will read higher than before.
+- Privacy mode (`--redact`) now also applies to `batch`, `watch`, `serve`,
+  `ask` and `chat`, not only `analyze`.
+- Contract type is chosen by scoring title and body keywords.
+
+### Fixed
+- Missing-clause detection compared labels with rule names, so clauses a
+  contract did contain (for example an NDA's remedies and exclusions) were
+  reported as missing. It now searches the text.
+- A contract containing the word "standard" or "agenda" could be
+  classified as an NDA, and "not an employee" could make a freelance
+  contract an employment agreement.
+- "Neither party may assign without consent" was flagged as if one party
+  could assign freely.
+- 66 new tests (120 total).
+
 ## [2.8.0] - Unreleased
 
 ### Added

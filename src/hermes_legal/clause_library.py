@@ -76,6 +76,65 @@ MODEL_CLAUSES: Dict[str, str] = {
         "conflict of laws principles. The parties submit to the non-exclusive jurisdiction of "
         "the courts of [JURISDICTION] for any proceeding arising out of this Agreement."
     ),
+    "Indemnification": (
+        "Each party (the 'Indemnifying Party') shall indemnify the other against third-party claims "
+        "to the extent caused by the Indemnifying Party's breach of this Agreement or its negligence "
+        "or willful misconduct. The indemnified party shall give prompt written notice of the claim, "
+        "allow the Indemnifying Party to control the defense, and cooperate reasonably. The "
+        "Indemnifying Party's total liability under this section is subject to the limitation of "
+        "liability in this Agreement."
+    ),
+    "Amendment": (
+        "This Agreement may be amended only by a written document signed by both parties. If a "
+        "party proposes a change to recurring fees or service terms, it shall give at least thirty "
+        "(30) days' written notice, and the other party may terminate this Agreement without "
+        "penalty before the change takes effect."
+    ),
+    "Assignment": (
+        "Neither party may assign or transfer this Agreement, in whole or in part, without the "
+        "other party's prior written consent, which shall not be unreasonably withheld. Either "
+        "party may assign this Agreement to a successor in a merger or sale of all or substantially "
+        "all of its business, provided it gives prompt written notice and the successor is not a "
+        "direct competitor of the other party."
+    ),
+    "Exclusivity": (
+        "During the term, [PARTY] shall not provide [DEFINED SERVICES] to [DEFINED COMPETITORS] in "
+        "[DEFINED FIELD]. This restriction applies only while [OTHER PARTY] pays at least [MINIMUM "
+        "FEES] per [PERIOD], and does not limit [PARTY] from providing other services or working "
+        "with other customers."
+    ),
+    "Non-Solicitation": (
+        "For twelve (12) months after termination, neither party shall knowingly solicit for "
+        "employment any employee of the other party with whom it worked directly during the "
+        "engagement. General advertisements not targeted at the other party's employees do not "
+        "breach this section."
+    ),
+    "Penalties": (
+        "If [PARTY] fails to deliver by the agreed date for reasons within its control, [OTHER "
+        "PARTY] may claim liquidated damages of [PERCENT]% of the affected fees for each full week "
+        "of delay after a grace period of [NUMBER] days, up to a maximum of [PERCENT]% of the total "
+        "fees. Liquidated damages are the sole remedy for the delay."
+    ),
+    "Warranty": (
+        "Contractor warrants that the deliverables will materially conform to the agreed "
+        "specifications for [NUMBER] days after delivery. If they do not, Contractor shall correct "
+        "the nonconformity at no additional charge within a reasonable time. Except as stated in "
+        "this section, no other warranties are given to the extent permitted by law."
+    ),
+    "Force Majeure": (
+        "Neither party is liable for delay or failure caused by events beyond its reasonable "
+        "control, such as natural disaster, war, government action, or widespread utility failure, "
+        "provided it notifies the other party promptly and uses reasonable efforts to resume "
+        "performance. If the event continues for more than sixty (60) days, either party may "
+        "terminate this Agreement by written notice."
+    ),
+    "Data Protection": (
+        "Each party shall process personal data received under this Agreement only to perform this "
+        "Agreement and in compliance with applicable data protection law. Neither party shall sell "
+        "personal data or share it with a third party except under a written agreement that "
+        "imposes equivalent protections. Each party shall notify the other without undue delay "
+        "after becoming aware of a personal data breach affecting the other party's data."
+    ),
 }
 
 

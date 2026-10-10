@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from ..deadlines import extract_obligations
 from ..clause_library import attach_model_clauses
 from ..explanations import attach_explanations
+from ..extract import extract_key_terms, extract_parties
 from ..memory.store import MemoryStore
 from ..playbook import Playbook
 from ..redact import is_remote_provider, redact_text
@@ -70,6 +71,26 @@ def _analyze_with_fallback(
             except Exception:
                 continue
         raise first_exc
+
+
+def _fill_gaps(result: AnalysisResult, text: str) -> None:
+    """
+    Whatever a provider leaves blank (parties, key terms) is filled from the
+    free offline extractors, using the original text. Provider-supplied values
+    always win. This keeps trend detection and the portfolio dashboard useful
+    even when a model did not return party names.
+    """
+    parties = (result.parties or "").strip()
+    if not parties or parties.lower().startswith("unknown"):
+        found = extract_parties(text)
+        if found:
+            result.parties = found
+    if not result.key_terms:
+        result.key_terms = extract_key_terms(text)
+    else:
+        for key, value in extract_key_terms(text).items():
+            if not any(key.lower() == k.lower() for k in result.key_terms):
+                result.key_terms[key] = value
 
 
 def analyze_contract(
@@ -138,6 +159,7 @@ def analyze_contract(
         send_text = safe_text if (safe_text is not None and is_remote_provider(provider.name)) else text
         result, fallback_note = provider.analyze(send_text, perspective=perspective, memory_context=context), None
 
+    _fill_gaps(result, text)
     result.clauses = attach_model_clauses(result.clauses)
     if explain:
         result.clauses = attach_explanations(result.clauses)

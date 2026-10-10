@@ -4,6 +4,7 @@ from typing import Optional
 
 from .memory.store import MemoryStore
 from .providers import get_provider, ProviderError
+from .redact import is_remote_provider, redact_text
 
 
 def _build_context(memory: MemoryStore, limit: int = 10) -> str:
@@ -20,7 +21,7 @@ def _build_context(memory: MemoryStore, limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def run_chat_mode(provider_name: str = "auto", console=None):
+def run_chat_mode(provider_name: str = "auto", console=None, redact: bool = False, redact_names=None):
     """
     A minimal chat loop over the analyzed-contract memory. Because
     providers are structured-JSON-only for the main analysis pipeline,
@@ -72,6 +73,8 @@ def run_chat_mode(provider_name: str = "auto", console=None):
             "consulting an attorney for anything binding.\n\n"
             f"{context}\n\nQuestion: {user_input}"
         )
+        if redact and is_remote_provider(provider.name):
+            prompt, _ = redact_text(prompt, names=redact_names or [])
         try:
             reply = provider.chat(prompt) if hasattr(provider, "chat") else _fallback_reply(provider, prompt)
         except Exception as exc:

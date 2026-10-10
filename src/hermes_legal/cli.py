@@ -17,6 +17,7 @@ from . import __version__
 from .analysis.engine import analyze_contract, compare_contracts
 from .analysis.risk import RISK_COLORS, RISK_ICONS, VERDICT_COLORS, VERDICT_ICONS
 from .ingest import read_document, SUPPORTED_EXTENSIONS
+from .config import KEY_TO_DEST, apply_config_defaults, config_path, load_config, write_example_config
 from .memory.store import MemoryStore
 from .playbook import DEFAULT_PLAYBOOK_PATH, Playbook, write_example_playbook
 from .providers import AUTO_DETECT_ORDER, PROVIDER_REGISTRY, AnalysisResult, ProviderError, get_provider
@@ -93,6 +94,11 @@ def _print_result(result, contract_hash: str, trend: Optional[str]):
                 if c.get("plain_explanation"):
                     console.print(f"  [bold]{c.get('name')}:[/] {c.get('plain_explanation')}")
 
+    if result.key_terms:
+        console.print("\n[bold cyan]Key Terms:[/]")
+        for k, v in result.key_terms.items():
+            console.print(f"  [bold]{k}:[/] {v}")
+
     if result.missing_clauses:
         console.print("\n[bold yellow]Missing Clauses:[/]")
         for m in result.missing_clauses:
@@ -102,6 +108,40 @@ def _print_result(result, contract_hash: str, trend: Optional[str]):
         console.print("\n[bold green]Recommended Actions:[/]")
         for i, rec in enumerate(result.recommendations, 1):
             console.print(f"  {i}. {rec}")
+
+
+def cmd_mcp(args):
+    # Nothing here may print to stdout: stdout carries the protocol.
+    from .mcp_server import run_mcp_server
+
+    run_mcp_server(
+        provider_name=args.provider, allow_dirs=args.allow_dir,
+        redact=args.redact, redact_names=args.redact_name,
+    )
+
+
+def cmd_config(args):
+    if args.config_command == "path":
+        console.print(str(config_path()))
+        return
+
+    if args.config_command == "init":
+        path, written = write_example_config(overwrite=args.force)
+        if written:
+            console.print(f"[green]Example config written to {path}[/]")
+            console.print("[dim]Everything in it is commented out. Remove the # in front of the options you want.[/]")
+        else:
+            console.print(f"[yellow]{path} already exists. Use --force to overwrite it.[/]")
+        return
+
+    config, warnings = load_config()
+    console.print(f"[bold]Config file:[/] {config_path()} ({'found' if config_path().exists() else 'not created yet'})")
+    if not config:
+        console.print("[dim]No options set. Create one with: hermes-legal config init[/]")
+    for key, value in config.items():
+        console.print(f"  {key}: {value}")
+    for warning in warnings:
+        console.print(f"[yellow]  warning: {warning}[/]")
 
 
 def cmd_clause(args):
@@ -314,7 +354,13 @@ def cmd_batch(args):
         console.print(f"[red]Not a folder: {folder}[/]")
         sys.exit(1)
 
-    files = sorted(p for p in folder.iterdir() if p.suffix.lower() in SUPPORTED_EXTENSIONS)
+    reports_dir = Path(args.reports_dir) if args.reports_dir else folder / "hermes_reports"
+    candidates = folder.rglob("*") if args.recursive else folder.iterdir()
+    files = sorted(
+        p for p in candidates
+        if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
+        and reports_dir.resolve() not in p.resolve().parents  # never re-analyze our own output
+    )
     if not files:
         console.print(f"[yellow]No supported contract files found in {folder}[/]")
         return
@@ -323,13 +369,18 @@ def cmd_batch(args):
     console.print(f"[dim]Using provider: {provider.name} | {len(files)} file(s) | parallel={args.parallel}[/]")
 
     memory = MemoryStore()
-    reports_dir = Path(args.reports_dir) if args.reports_dir else folder / "hermes_reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
+
+    def _label(f: Path) -> str:
+        return f.relative_to(folder).as_posix()
 
     def _process(f: Path):
         try:
             text = read_document(f)
-            outcome = analyze_contract(text, provider=provider, perspective=args.perspective, memory=memory, client=args.client)
+            outcome = analyze_contract(
+                text, provider=provider, perspective=args.perspective, memory=memory, client=args.client,
+                redact=args.redact, redact_names=args.redact_name,
+            )
             return f, outcome, None
         except Exception as exc:
             return f, None, exc
@@ -343,27 +394,28 @@ def cmd_batch(args):
                 futures = {executor.submit(_process, f): f for f in files}
                 for future in as_completed(futures):
                     results.append(future.result())
-        results.sort(key=lambda r: r[0].name)
+        results.sort(key=lambda r: _label(r[0]))
     else:
         for f in files:
             results.append(_process(f))
 
     rows = []
     for f, outcome, exc in results:
-        console.print(f"\n[bold]-> {f.name}[/]")
+        console.print(f"\n[bold]-> {_label(f)}[/]")
         if exc is not None:
             console.print(f"  [red]Failed: {exc}[/]")
-            rows.append({"file": f.name, "contract_type": "ERROR", "overall_risk": "", "verdict": str(exc)})
+            rows.append({"file": _label(f), "contract_type": "ERROR", "overall_risk": "", "verdict": str(exc)})
             continue
 
         result = outcome["result"]
         _print_result(result, outcome["hash"], outcome["trend"])
-        report_path = reports_dir / f"{f.stem}_report.md"
+        report_name = Path(_label(f)).with_suffix("").as_posix().replace("/", "__")
+        report_path = reports_dir / f"{report_name}_report.md"
         report_path.write_text(render_markdown_report(result, outcome["hash"], outcome["trend"]), encoding="utf-8")
 
         rows.append(
             {
-                "file": f.name,
+                "file": _label(f),
                 "contract_type": result.contract_type,
                 "parties": result.parties,
                 "language": result.language,
@@ -454,13 +506,14 @@ def cmd_watch(args):
     run_watch_mode(
         args.folder, provider_name=args.provider, perspective=args.perspective, console=console,
         webhook_url=args.webhook, alert_on=alert_on,
+        redact=args.redact, redact_names=args.redact_name,
     )
 
 
 def cmd_chat(args):
     from .chat import run_chat_mode
 
-    run_chat_mode(provider_name=args.provider, console=console)
+    run_chat_mode(provider_name=args.provider, console=console, redact=args.redact, redact_names=args.redact_name)
 
 
 def cmd_playbook_init(args):
@@ -539,7 +592,8 @@ def cmd_serve(args):
     from .webapp import run_server
 
     api_key = args.api_key or os.environ.get("HERMES_LEGAL_API_KEY")
-    run_server(host=args.host, port=args.port, provider_name=args.provider, open_browser=not args.no_browser, api_key=api_key)
+    run_server(host=args.host, port=args.port, provider_name=args.provider, open_browser=not args.no_browser, api_key=api_key,
+               redact=args.redact, redact_names=args.redact_name)
 
 
 def cmd_ask(args):
@@ -557,7 +611,7 @@ def cmd_ask(args):
     provider = get_provider(args.provider)
     with console.status(f"[cyan]Asking {provider.name}...[/]"):
         try:
-            answer = ask_contract(text, args.question, provider)
+            answer = ask_contract(text, args.question, provider, redact=args.redact, redact_names=args.redact_name)
         except Exception as exc:
             console.print(f"[red]Error: {exc}[/]")
             sys.exit(1)
@@ -678,6 +732,15 @@ def cmd_portfolio(args):
             pass
 
 
+def _add_privacy_args(p) -> None:
+    p.add_argument("--redact", dest="redact", action="store_true", default=False,
+                   help="Privacy mode: mask emails, phones, IBANs, ID numbers and named parties before text goes to a hosted provider (Groq, Gemini, OpenRouter).")
+    p.add_argument("--no-redact", dest="redact", action="store_false",
+                   help="Turn privacy mode off for this run (overrides a config file default).")
+    p.add_argument("--redact-name", action="append", default=[],
+                   help="A name (person or company) to mask in privacy mode. Repeatable.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hermes-legal",
@@ -692,6 +755,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p_analyze = sub.add_parser("analyze", help="Analyze a single contract file.")
+    _add_privacy_args(p_analyze)
     p_analyze.add_argument("contract", help="Path to a .txt, .md, .pdf, or .docx contract file.")
     p_analyze.add_argument("--provider", **common_provider)
     p_analyze.add_argument(
@@ -705,14 +769,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--redline-inline", help="Save an edited copy of the original .docx with suggestions inserted inline (requires .docx input and python-docx).")
     p_analyze.add_argument("--playbook", default=None, help="Path to a firm playbook YAML file (default: ~/.hermes-legal/playbook.yaml if present).")
     p_analyze.add_argument("--format", choices=["text", "json"], default="text", help="Output format for stdout (default: text).")
-    p_analyze.add_argument("--explain", action="store_true", help="Add plain-English explanations of each clause category.")
+    p_analyze.add_argument("--explain", dest="explain", action="store_true", default=False, help="Add plain-English explanations of each clause category.")
+    p_analyze.add_argument("--no-explain", dest="explain", action="store_false", help="Turn plain-English explanations off for this run (overrides a config file default).")
     p_analyze.add_argument("--no-fallback", action="store_true", help="Do not automatically fall back to another provider if the chosen one fails.")
     p_analyze.add_argument("--no-cache", action="store_true", help="Do not reuse a cached result for identical contract text.")
     p_analyze.add_argument("--force", action="store_true", help="Re-analyze even if this exact contract was analyzed before (bypasses cache).")
     p_analyze.add_argument("--include", action="append", help="Additional file(s) (exhibits/addenda) to append and analyze as one contract package. Repeatable.")
     p_analyze.add_argument("--client", default=None, help="Tag this analysis with a client/matter name for portfolio and history filtering.")
-    p_analyze.add_argument("--redact", action="store_true", help="Privacy mode: mask emails, phones, IBANs, ID numbers and named parties before sending text to a hosted provider (Groq, Gemini, OpenRouter).")
-    p_analyze.add_argument("--redact-name", action="append", default=[], help="A name (person or company) to mask in privacy mode. Repeatable.")
     p_analyze.add_argument("--no-ocr", action="store_true", help="Do not fall back to OCR for scanned PDFs with no extractable text.")
     p_analyze.add_argument("--no-save", action="store_true", help="Do not write this analysis to memory.")
     p_analyze.add_argument(
@@ -722,12 +785,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.set_defaults(func=cmd_analyze)
 
     p_batch = sub.add_parser("batch", help="Analyze every contract in a folder.")
+    _add_privacy_args(p_batch)
     p_batch.add_argument("folder", help="Folder containing contract files.")
     p_batch.add_argument("--provider", **common_provider)
     p_batch.add_argument("--perspective", default="neutral")
     p_batch.add_argument("--reports-dir", default=None, help="Where to write per-file reports and the CSV summary.")
     p_batch.add_argument("--client", default=None, help="Tag every analysis in this batch with a client/matter name.")
     p_batch.add_argument("--output-xlsx", default=None, help="Also save a formatted Excel (.xlsx) summary (requires openpyxl).")
+    p_batch.add_argument("--recursive", action="store_true", help="Also analyze contracts in sub-folders.")
     p_batch.add_argument("--parallel", type=int, default=1, help="Number of contracts to analyze concurrently (useful with hosted LLM providers). Default: 1 (sequential).")
     p_batch.add_argument("--no-browser", action="store_true", help="Do not auto-open the generated HTML dashboard.")
     p_batch.set_defaults(func=cmd_batch)
@@ -740,6 +805,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_compare.set_defaults(func=cmd_compare)
 
     p_watch = sub.add_parser("watch", help="Watch a folder and auto-analyze new contracts dropped into it.")
+    _add_privacy_args(p_watch)
     p_watch.add_argument("folder", help="Folder to watch.")
     p_watch.add_argument("--provider", **common_provider)
     p_watch.add_argument("--perspective", default="neutral")
@@ -748,6 +814,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.set_defaults(func=cmd_watch)
 
     p_chat = sub.add_parser("chat", help="Interactive chat about your analyzed contracts.")
+    _add_privacy_args(p_chat)
     p_chat.add_argument("--provider", **common_provider)
     p_chat.set_defaults(func=cmd_chat)
 
@@ -762,6 +829,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_clients = sub.add_parser("clients", help="List client/matter tags and how many contracts each has.")
     p_clients.set_defaults(func=cmd_clients)
+
+    p_mcp = sub.add_parser("mcp", help="Run an MCP server so AI assistants (Claude Desktop and others) can analyze contracts as a tool.")
+    _add_privacy_args(p_mcp)
+    p_mcp.add_argument("--provider", **common_provider)
+    p_mcp.add_argument("--allow-dir", action="append", default=[], help="Folder the assistant may read contracts from. Repeatable. Default: the current folder only.")
+    p_mcp.set_defaults(func=cmd_mcp)
+
+    p_config = sub.add_parser("config", help="Create or inspect the config file with your default options.")
+    config_sub = p_config.add_subparsers(dest="config_command", required=True)
+    config_init = config_sub.add_parser("init", help="Write an example config file (all options commented out).")
+    config_init.add_argument("--force", action="store_true", help="Overwrite an existing config file.")
+    config_sub.add_parser("show", help="Show the options currently set and any problems.")
+    config_sub.add_parser("path", help="Print where the config file lives.")
+    p_config.set_defaults(func=cmd_config)
 
     p_clause = sub.add_parser("clause", help="Browse the model replacement clause library.")
     p_clause.add_argument("name", nargs="?", default=None, help="Clause name, e.g. Termination, Liability, Non-Compete.")
@@ -790,6 +871,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_generate.set_defaults(func=cmd_generate)
 
     p_serve = sub.add_parser("serve", help="Launch a local web dashboard for drag-and-drop contract analysis.")
+    _add_privacy_args(p_serve)
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8765)
     p_serve.add_argument("--provider", **common_provider)
@@ -798,6 +880,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.set_defaults(func=cmd_serve)
 
     p_ask = sub.add_parser("ask", help="Ask a specific contract a direct question.")
+    _add_privacy_args(p_ask)
     p_ask.add_argument("contract", help="Path to a .txt, .md, .pdf, or .docx contract file.")
     p_ask.add_argument("question", help="Your question, e.g. 'what is the termination notice period?'")
     p_ask.add_argument("--provider", **common_provider)
@@ -818,6 +901,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None):
     parser = build_parser()
+    config, warnings = load_config()
+    for warning in warnings:
+        # stderr, so a warning can never corrupt machine-readable output such as --format json
+        print(f"hermes-legal config: {warning}", file=sys.stderr)
+    apply_config_defaults(parser, config)
     args = parser.parse_args(argv)
     args.func(args)
 
